@@ -1,3 +1,6 @@
+@import 'mapbox-gl/dist/mapbox-gl.css';
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,25 +10,23 @@
    Colors: Coral pink, dark charcoal, cream
 */
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
-
 @layer base {
   :root {
     /* Core Brand Colors */
     --coral: 6 67% 70%;
     --coral-light: 6 70% 80%;
     --coral-dark: 6 60% 55%;
-    
+
     --charcoal: 15 12% 25%;
     --charcoal-dark: 15 15% 18%;
     --charcoal-light: 15 10% 35%;
-    
+
     --cream: 40 30% 96%;
     --cream-dark: 40 20% 90%;
-    
+
     --sage: 150 15% 45%;
     --gold: 42 70% 55%;
-    
+
     /* Semantic Tokens - Light Mode (Cream-based) */
     --background: 40 30% 96%;
     --foreground: 15 15% 18%;
@@ -56,13 +57,13 @@
     --ring: 6 67% 70%;
 
     --radius: 0.75rem;
-    
+
     /* Custom Effects */
     --shadow-soft: 0 4px 20px -4px hsl(15 15% 18% / 0.1);
     --shadow-card: 0 8px 30px -8px hsl(15 15% 18% / 0.12);
     --shadow-elevated: 0 20px 50px -15px hsl(15 15% 18% / 0.2);
     --shadow-glow: 0 0 40px hsl(6 67% 70% / 0.3);
-    
+
     --gradient-hero: linear-gradient(135deg, hsl(var(--charcoal-dark)), hsl(var(--charcoal)));
     --gradient-coral: linear-gradient(135deg, hsl(var(--coral)), hsl(var(--coral-light)));
     --gradient-warm: linear-gradient(180deg, hsl(var(--cream)) 0%, hsl(var(--cream-dark)) 100%);
@@ -111,7 +112,7 @@
     --shadow-soft: 0 4px 20px -4px hsl(0 0% 0% / 0.3);
     --shadow-card: 0 8px 30px -8px hsl(0 0% 0% / 0.4);
     --shadow-elevated: 0 20px 50px -15px hsl(0 0% 0% / 0.5);
-    
+
     --sidebar-background: 15 15% 12%;
     --sidebar-foreground: 40 30% 96%;
     --sidebar-primary: 6 67% 70%;
@@ -136,7 +137,12 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     @apply font-display;
   }
 }
@@ -146,57 +152,63 @@
     @apply bg-clip-text text-transparent;
     background-image: var(--gradient-coral);
   }
-  
+
   .bg-gradient-hero {
     background: var(--gradient-hero);
   }
-  
+
   .bg-gradient-coral {
     background: var(--gradient-coral);
   }
-  
+
   .bg-gradient-warm {
     background: var(--gradient-warm);
   }
-  
+
   .shadow-soft {
     box-shadow: var(--shadow-soft);
   }
-  
+
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
-  
+
   .shadow-elevated {
     box-shadow: var(--shadow-elevated);
   }
-  
+
   .shadow-glow {
     box-shadow: var(--shadow-glow);
   }
-  
+
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
-  
+
   .animate-pulse-soft {
     animation: pulse-soft 3s ease-in-out infinite;
   }
 }
 
 @keyframes float {
-  0%, 100% {
+
+  0%,
+  100% {
     transform: translateY(0px);
   }
+
   50% {
     transform: translateY(-10px);
   }
 }
 
 @keyframes pulse-soft {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.7;
   }
