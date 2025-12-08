@@ -1,7 +1,7 @@
 import { Heart, Bookmark, ThumbsUp, ThumbsDown, MapPin, DollarSign, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface PlaceCardProps {
   name: string;
@@ -30,100 +30,155 @@ export function PlaceCard({
 }: PlaceCardProps) {
   const [reaction, setReaction] = useState<ReactionType>(null);
 
+  // Load reaction from localStorage on mount
+  useEffect(() => {
+    try {
+      const reactions = localStorage.getItem('place_reactions');
+      if (reactions) {
+        const parsed = JSON.parse(reactions);
+        const placeReactions = parsed[name] || {};
+        if (placeReactions.heart || placeReactions.love) {
+          setReaction('heart');
+        } else if (placeReactions.bookmark) {
+          setReaction('bookmark');
+        } else if (placeReactions.like) {
+          setReaction('like');
+        } else if (placeReactions.dislike) {
+          setReaction('dislike');
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  }, [name]);
+
   const handleReaction = (type: ReactionType) => {
-    setReaction(reaction === type ? null : type);
+    const newReaction = reaction === type ? null : type;
+    setReaction(newReaction);
+
+    // Save to localStorage
+    try {
+      const reactions = localStorage.getItem('place_reactions') || '{}';
+      const parsed = JSON.parse(reactions);
+
+      if (!parsed[name]) {
+        parsed[name] = {};
+      }
+
+      // Clear previous reactions
+      delete parsed[name].heart;
+      delete parsed[name].love;
+      delete parsed[name].bookmark;
+      delete parsed[name].like;
+      delete parsed[name].dislike;
+
+      // Set new reaction
+      if (newReaction === 'heart') {
+        parsed[name].heart = true;
+      } else if (newReaction === 'bookmark') {
+        parsed[name].bookmark = true;
+      } else if (newReaction === 'like') {
+        parsed[name].like = true;
+      } else if (newReaction === 'dislike') {
+        parsed[name].dislike = true;
+      }
+
+      localStorage.setItem('place_reactions', JSON.stringify(parsed));
+    } catch {
+      // Ignore errors
+    }
   };
 
   const priceLabel = "$".repeat(price);
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4 }}
-      className={cn(
+      initial={ { opacity: 0, y: 20 } }
+      animate={ { opacity: 1, y: 0 } }
+      whileHover={ { y: -4 } }
+      className={ cn(
         "group bg-card rounded-2xl overflow-hidden shadow-card hover:shadow-elevated transition-all duration-300",
         className
-      )}
+      ) }
     >
-      {/* Image */}
+      {/* Image */ }
       <div className="relative h-40 bg-muted overflow-hidden">
-        {imageUrl ? (
+        { imageUrl ? (
           <img
-            src={imageUrl}
-            alt={name}
+            src={ imageUrl }
+            alt={ name }
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full bg-gradient-coral opacity-30" />
-        )}
-        {/* Category Badge */}
+        ) }
+        {/* Category Badge */ }
         <span className="absolute top-3 left-3 px-3 py-1 bg-charcoal-dark/80 text-cream text-xs font-medium rounded-full backdrop-blur-sm">
-          {category}
+          { category }
         </span>
       </div>
 
-      {/* Content */}
+      {/* Content */ }
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <h3 className="font-display font-semibold text-lg text-foreground leading-tight line-clamp-1">
-            {name}
+            { name }
           </h3>
           <span className="text-coral font-semibold text-sm whitespace-nowrap">
-            {priceLabel}
+            { priceLabel }
           </span>
         </div>
 
         <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3">
           <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="line-clamp-1">{address}</span>
+          <span className="line-clamp-1">{ address }</span>
         </div>
 
-        {cuisine && (
+        { cuisine && (
           <span className="inline-block px-2 py-0.5 bg-secondary text-secondary-foreground text-xs rounded-md mb-3">
-            {cuisine}
+            { cuisine }
           </span>
-        )}
+        ) }
 
-        {/* Stats */}
+        {/* Stats */ }
         <div className="flex items-center gap-4 text-sm mb-4">
           <div className="flex items-center gap-1">
             <Star className="h-4 w-4 text-gold fill-gold" />
-            <span className="font-medium">{rating.toFixed(1)}</span>
+            <span className="font-medium">{ rating.toFixed(1) }</span>
           </div>
           <div className="flex items-center gap-1 text-muted-foreground">
-            <span className="text-sage">{sentiment}%</span>
+            <span className="text-sage">{ sentiment }%</span>
             <span>positive</span>
           </div>
         </div>
 
-        {/* Reactions */}
+        {/* Reactions */ }
         <div className="flex items-center gap-1 pt-3 border-t border-border">
           <ReactionButton
-            icon={Heart}
-            active={reaction === "heart"}
-            onClick={() => handleReaction("heart")}
+            icon={ Heart }
+            active={ reaction === "heart" }
+            onClick={ () => handleReaction("heart") }
             label="Favourite"
             activeColor="text-coral fill-coral"
           />
           <ReactionButton
-            icon={Bookmark}
-            active={reaction === "bookmark"}
-            onClick={() => handleReaction("bookmark")}
+            icon={ Bookmark }
+            active={ reaction === "bookmark" }
+            onClick={ () => handleReaction("bookmark") }
             label="Want to Go"
             activeColor="text-gold fill-gold"
           />
           <ReactionButton
-            icon={ThumbsUp}
-            active={reaction === "like"}
-            onClick={() => handleReaction("like")}
+            icon={ ThumbsUp }
+            active={ reaction === "like" }
+            onClick={ () => handleReaction("like") }
             label="Like"
             activeColor="text-sage"
           />
           <ReactionButton
-            icon={ThumbsDown}
-            active={reaction === "dislike"}
-            onClick={() => handleReaction("dislike")}
+            icon={ ThumbsDown }
+            active={ reaction === "dislike" }
+            onClick={ () => handleReaction("dislike") }
             label="Dislike"
             activeColor="text-muted-foreground"
           />
@@ -144,14 +199,14 @@ interface ReactionButtonProps {
 function ReactionButton({ icon: Icon, active, onClick, label, activeColor }: ReactionButtonProps) {
   return (
     <button
-      onClick={onClick}
-      className={cn(
+      onClick={ onClick }
+      className={ cn(
         "flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium transition-all",
         active
           ? activeColor + " bg-accent"
           : "text-muted-foreground hover:text-foreground hover:bg-accent"
-      )}
-      title={label}
+      ) }
+      title={ label }
     >
       <Icon className="h-4 w-4" />
     </button>

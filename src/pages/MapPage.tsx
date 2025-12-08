@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { PlaceCard } from "@/components/place/PlaceCard";
@@ -14,14 +14,89 @@ type ViewMode = "map" | "cards";
 
 const CASABLANCA_CENTER: [number, number] = [-7.5898, 33.5731];
 
+function getPlaceReactions(placeName: string): { favourites: boolean; wantToGo: boolean } {
+  try {
+    const reactions = localStorage.getItem('place_reactions');
+    if (!reactions) return { favourites: false, wantToGo: false };
+
+    const parsed = JSON.parse(reactions);
+    const placeReactions = parsed[placeName] || {};
+
+    return {
+      favourites: placeReactions.heart === true || placeReactions.love === true,
+      wantToGo: placeReactions.bookmark === true,
+    };
+  } catch {
+    return { favourites: false, wantToGo: false };
+  }
+}
+
+function filterPlaces(places: Place[], filters: Record<string, string[]>): Place[] {
+  return places.filter((place) => {
+    // Price filter
+    if (filters.price && filters.price.length > 0) {
+      const priceValues = filters.price.map((p) => parseInt(p, 10));
+      if (!priceValues.includes(place.price)) {
+        return false;
+      }
+    }
+
+    // Cuisine filter
+    if (filters.cuisine && filters.cuisine.length > 0) {
+      const cuisineLower = place.cuisine?.toLowerCase() || "";
+      const matches = filters.cuisine.some(
+        (filterCuisine) => cuisineLower === filterCuisine.toLowerCase()
+      );
+      if (!matches) {
+        return false;
+      }
+    }
+
+    // Category filter
+    if (filters.category && filters.category.length > 0) {
+      const categoryLower = place.category.toLowerCase();
+      const matches = filters.category.some(
+        (filterCategory) => categoryLower === filterCategory.toLowerCase()
+      );
+      if (!matches) {
+        return false;
+      }
+    }
+
+    // Style filter - пока нет в данных, пропускаем
+
+    // List filter (favourites, want_to_go)
+    if (filters.list && filters.list.length > 0) {
+      const reactions = getPlaceReactions(place.name);
+      const matches = filters.list.some((listType) => {
+        if (listType === 'favourites') {
+          return reactions.favourites;
+        }
+        if (listType === 'want_to_go') {
+          return reactions.wantToGo;
+        }
+        return false;
+      });
+      if (!matches) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
 export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [filters, setFilters] = useState<Record<string, string[]>>({});
 
   const handleFilterChange = (newFilters: Record<string, string[]>) => {
     setFilters(newFilters);
-    console.log("Filters changed:", newFilters);
   };
+
+  const filteredPlaces = useMemo(() => {
+    return filterPlaces(casablancaPlaces, filters);
+  }, [filters]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -36,7 +111,8 @@ export default function MapPage() {
           <div className="container mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
-                { casablancaPlaces.length } places saved
+                { filteredPlaces.length } { filteredPlaces.length === 1 ? "place" : "places" }
+                { Object.keys(filters).length > 0 && ` (filtered from ${casablancaPlaces.length})` }
               </span>
             </div>
 
@@ -84,9 +160,9 @@ export default function MapPage() {
         {/* Content Area */ }
         <div className="flex-1">
           { viewMode === "map" ? (
-            <MapView places={ casablancaPlaces } />
+            <MapView places={ filteredPlaces } />
           ) : (
-            <CardsView places={ casablancaPlaces } />
+            <CardsView places={ filteredPlaces } />
           ) }
         </div>
       </main>
@@ -166,17 +242,22 @@ function MapView({ places }: MapViewProps) {
         }
       });
 
-      if (places.length > 0 && places[0].latitude && places[0].longitude) {
-        const bounds = new mapboxgl.LngLatBounds();
-        places.forEach(place => {
-          if (place.latitude && place.longitude) {
+      if (places.length > 0) {
+        const placesWithCoords = places.filter(p => p.latitude && p.longitude);
+        if (placesWithCoords.length > 0) {
+          const bounds = new mapboxgl.LngLatBounds();
+          placesWithCoords.forEach(place => {
             bounds.extend([place.longitude, place.latitude]);
-          }
-        });
-        map.current.fitBounds(bounds, {
-          padding: { top: 50, bottom: 50, left: 50, right: 50 },
-          maxZoom: 14
-        });
+          });
+          map.current.fitBounds(bounds, {
+            padding: { top: 50, bottom: 50, left: 50, right: 50 },
+            maxZoom: 14
+          });
+        }
+      } else {
+        // Если нет мест, центрируем на Касабланку
+        map.current.setCenter(CASABLANCA_CENTER);
+        map.current.setZoom(DEFAULT_ZOOM);
       }
     });
 
@@ -218,6 +299,24 @@ interface CardsViewProps {
 }
 
 function CardsView({ places }: CardsViewProps) {
+  if (places.length === 0) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Map className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h3 className="font-display text-xl font-semibold text-foreground mb-2">
+            No places found
+          </h3>
+          <p className="text-muted-foreground">
+            Try adjusting your filters to see more results.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
