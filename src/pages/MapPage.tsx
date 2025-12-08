@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Navbar } from "@/components/layout/Navbar";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { PlaceCard } from "@/components/place/PlaceCard";
@@ -126,6 +127,7 @@ function filterPlaces(
 
 export default function MapPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
@@ -133,6 +135,16 @@ export default function MapPage() {
   const [isNearestEnabled, setIsNearestEnabled] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+
+  useEffect(() => {
+    const listParam = searchParams.get('list');
+    if (listParam && (listParam === 'favourites' || listParam === 'want_to_go')) {
+      setFilters(prev => ({
+        ...prev,
+        list: [listParam],
+      }));
+    }
+  }, [searchParams]);
 
   const loadLocalStorageReactions = useCallback(() => {
     try {
@@ -312,7 +324,7 @@ export default function MapPage() {
 
       <main className="flex-1 pt-16 flex flex-col">
         {/* Filter Bar */ }
-        <FilterBar onFilterChange={ handleFilterChange } />
+        <FilterBar onFilterChange={ handleFilterChange } filters={ filters } />
 
         {/* View Toggle & Actions */ }
         <div className="border-b border-border bg-card/50">

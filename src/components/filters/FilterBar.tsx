@@ -11,6 +11,7 @@ interface FilterOption {
 
 interface FilterBarProps {
   onFilterChange?: (filters: Record<string, string[]>) => void;
+  filters?: Record<string, string[]>;
 }
 
 const listOptions: FilterOption[] = [
@@ -58,9 +59,15 @@ const styleOptions: FilterOption[] = [
   { value: "hidden_gem", label: "Hidden Gem" },
 ];
 
-export function FilterBar({ onFilterChange }: FilterBarProps) {
-  const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({});
+export function FilterBar({ onFilterChange, filters: externalFilters }: FilterBarProps) {
+  const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>(externalFilters || {});
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (externalFilters !== undefined) {
+      setActiveFilters(externalFilters);
+    }
+  }, [externalFilters]);
 
   const toggleFilter = (category: string, value: string) => {
     const current = activeFilters[category] || [];

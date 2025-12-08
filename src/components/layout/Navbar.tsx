@@ -69,15 +69,10 @@ export function Navbar() {
         {/* CTA Buttons */ }
         <div className="hidden md:flex items-center gap-3">
           { isAuthenticated ? (
-            <>
-              <span className="text-sm text-muted-foreground">
-                { user?.email }
-              </span>
-              <Button variant="ghost" size="sm" onClick={ handleSignOut }>
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" onClick={ handleSignOut }>
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
           ) : (
             <>
               <Link to="/auth">
