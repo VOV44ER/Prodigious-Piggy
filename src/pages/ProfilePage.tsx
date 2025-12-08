@@ -29,6 +29,7 @@ export default function ProfilePage() {
   const [location, setLocation] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [userName, setUserName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const loadReactions = useCallback(async () => {
     try {
@@ -137,19 +138,26 @@ export default function ProfilePage() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, avatar_url')
         .eq('id', user.id)
         .single();
 
-      if (!error && data?.full_name) {
-        setUserName(data.full_name);
-      } else if (user.user_metadata?.full_name) {
+      if (!error && data) {
+        if (data.full_name) {
+          setUserName(data.full_name);
+        }
+        if (data.avatar_url) {
+          setAvatarUrl(data.avatar_url);
+        }
+      }
+
+      if (!userName && user.user_metadata?.full_name) {
         setUserName(user.user_metadata.full_name);
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
     }
-  }, [user]);
+  }, [user, userName]);
 
   useEffect(() => {
     loadReactions();
@@ -160,10 +168,16 @@ export default function ProfilePage() {
       loadReactions();
     };
 
+    const handleProfileUpdate = () => {
+      loadUserProfile();
+    };
+
     window.addEventListener('place_reactions_updated', handleReactionsUpdate);
+    window.addEventListener('profile_updated', handleProfileUpdate);
 
     return () => {
       window.removeEventListener('place_reactions_updated', handleReactionsUpdate);
+      window.removeEventListener('profile_updated', handleProfileUpdate);
     };
   }, [loadReactions, getCurrentLocation, loadUserProfile]);
 
@@ -184,7 +198,6 @@ export default function ProfilePage() {
     {
       section: "Account",
       items: [
-        { label: "Profile Settings", icon: Settings, href: "/settings" },
         { label: "Subscription", icon: CreditCard, href: "/subscription", badge: "Pro" },
         { label: "Referral Program", icon: Gift, href: "/referrals" },
       ],
@@ -204,9 +217,17 @@ export default function ProfilePage() {
               className="flex flex-col md:flex-row items-center gap-6"
             >
               {/* Avatar */ }
-              <div className="w-24 h-24 bg-gradient-coral rounded-2xl flex items-center justify-center shadow-elevated">
-                <User className="h-12 w-12 text-charcoal-dark" />
-              </div>
+              { avatarUrl ? (
+                <img
+                  src={ avatarUrl }
+                  alt="Avatar"
+                  className="w-24 h-24 rounded-2xl object-cover shadow-elevated border-2 border-cream/20"
+                />
+              ) : (
+                <div className="w-24 h-24 bg-gradient-coral rounded-2xl flex items-center justify-center shadow-elevated">
+                  <User className="h-12 w-12 text-charcoal-dark" />
+                </div>
+              ) }
 
               {/* User Info */ }
               <div className="text-center md:text-left">
@@ -237,10 +258,12 @@ export default function ProfilePage() {
 
               {/* Edit Button */ }
               <div className="md:ml-auto">
-                <Button variant="hero-outline" size="sm">
-                  <Settings className="h-4 w-4" />
-                  Edit Profile
-                </Button>
+                <Link to="/settings">
+                  <Button variant="hero-outline" size="sm">
+                    <Settings className="h-4 w-4" />
+                    Edit Profile
+                  </Button>
+                </Link>
               </div>
             </motion.div>
           </div>
