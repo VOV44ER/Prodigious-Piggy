@@ -25,6 +25,8 @@ export default function ProfilePage() {
   const [favouritesCount, setFavouritesCount] = useState(0);
   const [wantToGoCount, setWantToGoCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [location, setLocation] = useState<string | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
 
   const loadReactions = useCallback(async () => {
     try {
@@ -64,8 +66,72 @@ export default function ProfilePage() {
     }
   }, [user]);
 
+  const getLocationName = useCallback(async (latitude: number, longitude: number) => {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1&accept-language=en`,
+        {
+          headers: {
+            'User-Agent': 'Prodigious-Piggy/1.0',
+            'Accept-Language': 'en'
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch location');
+      }
+
+      const data = await response.json();
+      const city = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality;
+      const country = data.address?.country;
+
+      if (city && country) {
+        return `${city}, ${country}`;
+      } else if (country) {
+        return country;
+      } else if (city) {
+        return city;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching location name:', error);
+      return null;
+    }
+  }, []);
+
+  const getCurrentLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      return;
+    }
+
+    setLocationLoading(true);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        const locationName = await getLocationName(latitude, longitude);
+        if (locationName) {
+          setLocation(locationName);
+        }
+        setLocationLoading(false);
+      },
+      (error) => {
+        console.error('Error getting location:', error);
+        setLocationLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 60000,
+      }
+    );
+  }, [getLocationName]);
+
   useEffect(() => {
     loadReactions();
+    getCurrentLocation();
 
     const handleReactionsUpdate = () => {
       loadReactions();
@@ -76,7 +142,7 @@ export default function ProfilePage() {
     return () => {
       window.removeEventListener('place_reactions_updated', handleReactionsUpdate);
     };
-  }, [loadReactions]);
+  }, [loadReactions, getCurrentLocation]);
 
   const stats = [
     { label: "Favourites", value: favouritesCount, icon: Heart, color: "text-coral" },
@@ -132,10 +198,17 @@ export default function ProfilePage() {
                   <span className="px-3 py-1 bg-coral/20 text-coral-light text-sm font-medium rounded-full">
                     Pro Member
                   </span>
-                  <span className="px-3 py-1 bg-cream/10 text-cream/60 text-sm rounded-full flex items-center gap-1">
-                    <MapPin className="h-3 w-3" />
-                    London, UK
-                  </span>
+                  { locationLoading ? (
+                    <span className="px-3 py-1 bg-cream/10 text-cream/60 text-sm rounded-full flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      Loading...
+                    </span>
+                  ) : location ? (
+                    <span className="px-3 py-1 bg-cream/10 text-cream/60 text-sm rounded-full flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      { location }
+                    </span>
+                  ) : null }
                 </div>
               </div>
 
