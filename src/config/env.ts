@@ -21,6 +21,9 @@ export const ENV = {
   PLAUSIBLE_DOMAIN: import.meta.env.VITE_PLAUSIBLE_DOMAIN || '',
   PLAUSIBLE_API_HOST: import.meta.env.VITE_PLAUSIBLE_API_HOST || 'https://plausible.io',
 
+  // OpenAI
+  OPENAI_API_KEY: import.meta.env.VITE_OPENAI_API_KEY || '',
+
   // Feature Flags
   ENABLE_AI_CHAT: import.meta.env.VITE_ENABLE_AI_CHAT !== 'false',
   ENABLE_MAP: import.meta.env.VITE_ENABLE_MAP !== 'false',
