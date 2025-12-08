@@ -7,97 +7,12 @@ import { Map, Grid3X3, Navigation, Locate } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
-import { getMapboxToken, getMapConfig, DEFAULT_CENTER, DEFAULT_ZOOM } from "@/integrations/mapbox/client";
+import { getMapboxToken, getMapConfig, DEFAULT_ZOOM } from "@/integrations/mapbox/client";
+import { casablancaPlaces, type Place } from "@/data/casablanca-places";
 
 type ViewMode = "map" | "cards";
 
-interface Place {
-  name: string;
-  address: string;
-  category: string;
-  cuisine: string;
-  price: 1 | 2 | 3 | 4;
-  rating: number;
-  sentiment: number;
-  imageUrl: string;
-  latitude: number;
-  longitude: number;
-}
-
-const samplePlaces: Place[] = [
-  {
-    name: "The Ivy Chelsea Garden",
-    address: "195 King's Road, London",
-    category: "Restaurant",
-    cuisine: "British",
-    price: 3 as const,
-    rating: 4.6,
-    sentiment: 87,
-    imageUrl: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop",
-    latitude: 51.4886,
-    longitude: -0.1694,
-  },
-  {
-    name: "Gordon's Wine Bar",
-    address: "47 Villiers St, London",
-    category: "Bar",
-    cuisine: "Wine Bar",
-    price: 2 as const,
-    rating: 4.8,
-    sentiment: 92,
-    imageUrl: "https://images.unsplash.com/photo-1574096079513-d8259312b785?w=400&h=300&fit=crop",
-    latitude: 51.5081,
-    longitude: -0.1236,
-  },
-  {
-    name: "Koya Bar",
-    address: "50 Frith St, London",
-    category: "Restaurant",
-    cuisine: "Japanese",
-    price: 2 as const,
-    rating: 4.7,
-    sentiment: 95,
-    imageUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop",
-    latitude: 51.5142,
-    longitude: -0.1331,
-  },
-  {
-    name: "Dishoom Covent Garden",
-    address: "12 Upper St Martin's Lane",
-    category: "Restaurant",
-    cuisine: "Indian",
-    price: 2 as const,
-    rating: 4.7,
-    sentiment: 94,
-    imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=400&h=300&fit=crop",
-    latitude: 51.5115,
-    longitude: -0.1260,
-  },
-  {
-    name: "Padella",
-    address: "1 Phipp St, London",
-    category: "Restaurant",
-    cuisine: "Italian",
-    price: 2 as const,
-    rating: 4.8,
-    sentiment: 96,
-    imageUrl: "https://images.unsplash.com/photo-1473093226795-af9932fe5856?w=400&h=300&fit=crop",
-    latitude: 51.5234,
-    longitude: -0.0814,
-  },
-  {
-    name: "The Wolseley",
-    address: "160 Piccadilly, London",
-    category: "Restaurant",
-    cuisine: "European",
-    price: 3 as const,
-    rating: 4.5,
-    sentiment: 88,
-    imageUrl: "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?w=400&h=300&fit=crop",
-    latitude: 51.5069,
-    longitude: -0.1416,
-  },
-];
+const CASABLANCA_CENTER: [number, number] = [-7.5898, 33.5731];
 
 export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
@@ -121,7 +36,7 @@ export default function MapPage() {
           <div className="container mx-auto px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
-                { samplePlaces.length } places saved
+                { casablancaPlaces.length } places saved
               </span>
             </div>
 
@@ -169,9 +84,9 @@ export default function MapPage() {
         {/* Content Area */ }
         <div className="flex-1">
           { viewMode === "map" ? (
-            <MapView places={ samplePlaces } />
+            <MapView places={ casablancaPlaces } />
           ) : (
-            <CardsView places={ samplePlaces } />
+            <CardsView places={ casablancaPlaces } />
           ) }
         </div>
       </main>
@@ -204,8 +119,8 @@ function MapView({ places }: MapViewProps) {
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: config.style || 'mapbox://styles/mapbox/streets-v12',
-      center: config.center || DEFAULT_CENTER,
-      zoom: config.zoom || DEFAULT_ZOOM,
+      center: CASABLANCA_CENTER,
+      zoom: DEFAULT_ZOOM,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');

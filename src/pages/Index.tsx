@@ -6,6 +6,7 @@ import { PlaceCard } from "@/components/place/PlaceCard";
 import { motion } from "framer-motion";
 import { MessageCircle, Map, Heart, Sparkles, Globe, Shield, ChevronRight } from "lucide-react";
 import heroDiner from "@/assets/hero-diner.jpg";
+import { casablancaPlaces } from "@/data/casablanca-places";
 
 const features = [
   {
@@ -40,77 +41,46 @@ const features = [
   },
 ];
 
-const samplePlaces = [
-  {
-    name: "The Ivy Chelsea Garden",
-    address: "195 King's Road, London",
-    category: "Restaurant",
-    cuisine: "British",
-    price: 3 as const,
-    rating: 4.6,
-    sentiment: 87,
-    imageUrl: "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop",
-  },
-  {
-    name: "Gordon's Wine Bar",
-    address: "47 Villiers St, London",
-    category: "Bar",
-    cuisine: "Wine Bar",
-    price: 2 as const,
-    rating: 4.8,
-    sentiment: 92,
-    imageUrl: "https://images.unsplash.com/photo-1574096079513-d8259312b785?w=400&h=300&fit=crop",
-  },
-  {
-    name: "Koya Bar",
-    address: "50 Frith St, London",
-    category: "Restaurant",
-    cuisine: "Japanese",
-    price: 2 as const,
-    rating: 4.7,
-    sentiment: 95,
-    imageUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop",
-  },
-];
+const samplePlaces = casablancaPlaces.slice(0, 3);
 
 export default function Index() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Hero Section */}
+      {/* Hero Section */ }
       <section className="relative min-h-[90vh] flex items-center pt-16 overflow-hidden">
-        {/* Background */}
+        {/* Background */ }
         <div className="absolute inset-0 bg-gradient-hero">
           <div className="absolute inset-0 bg-charcoal-dark/60" />
           <img
-            src={heroDiner}
+            src={ heroDiner }
             alt=""
             className="absolute inset-0 w-full h-full object-cover opacity-40 mix-blend-overlay"
           />
-          {/* Decorative elements */}
+          {/* Decorative elements */ }
           <div className="absolute top-1/4 left-10 w-64 h-64 bg-coral/20 rounded-full blur-3xl animate-pulse-soft" />
-          <div className="absolute bottom-1/4 right-10 w-96 h-96 bg-coral/10 rounded-full blur-3xl animate-pulse-soft" style={{ animationDelay: "1s" }} />
+          <div className="absolute bottom-1/4 right-10 w-96 h-96 bg-coral/10 rounded-full blur-3xl animate-pulse-soft" style={ { animationDelay: "1s" } } />
         </div>
 
         <div className="container mx-auto px-4 relative z-10">
           <div className="max-w-3xl mx-auto text-center">
             <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
+              initial={ { opacity: 0, y: 30 } }
+              animate={ { opacity: 1, y: 0 } }
+              transition={ { duration: 0.8 } }
             >
               <span className="inline-block px-4 py-1.5 bg-coral/20 text-coral-light text-sm font-medium rounded-full mb-6 backdrop-blur-sm border border-coral/30">
                 🐷 AI-Powered Foodie Discovery
               </span>
-              
+
               <h1 className="font-display text-5xl md:text-7xl font-bold text-cream mb-6 leading-tight">
                 Discover Places <br />
                 <span className="text-gradient">You'll Actually Love</span>
               </h1>
-              
+
               <p className="text-lg md:text-xl text-cream/70 mb-10 max-w-2xl mx-auto leading-relaxed">
-                Piggy combines trusted curation with AI-powered discovery. Find hidden gems, 
+                Piggy combines trusted curation with AI-powered discovery. Find hidden gems,
                 track your favourites, and get personalized recommendations that improve with every interaction.
               </p>
 
@@ -132,73 +102,73 @@ export default function Index() {
           </div>
         </div>
 
-        {/* Scroll indicator */}
+        {/* Scroll indicator */ }
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.5 }}
+          initial={ { opacity: 0 } }
+          animate={ { opacity: 1 } }
+          transition={ { delay: 1.5 } }
           className="absolute bottom-8 left-1/2 -translate-x-1/2"
         >
           <div className="w-6 h-10 border-2 border-cream/30 rounded-full flex justify-center pt-2">
             <motion.div
-              animate={{ y: [0, 8, 0] }}
-              transition={{ repeat: Infinity, duration: 1.5 }}
+              animate={ { y: [0, 8, 0] } }
+              transition={ { repeat: Infinity, duration: 1.5 } }
               className="w-1.5 h-1.5 bg-cream/50 rounded-full"
             />
           </div>
         </motion.div>
       </section>
 
-      {/* Features Section */}
+      {/* Features Section */ }
       <section className="py-24 bg-background">
         <div className="container mx-auto px-4">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            initial={ { opacity: 0, y: 20 } }
+            whileInView={ { opacity: 1, y: 0 } }
+            viewport={ { once: true } }
             className="text-center mb-16"
           >
             <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
               Why Foodies Choose Piggy
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Traditional discovery tools fail to give you flexible, trustworthy experiences. 
+              Traditional discovery tools fail to give you flexible, trustworthy experiences.
               Piggy is different.
             </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((feature, index) => (
+            { features.map((feature, index) => (
               <motion.div
-                key={feature.title}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
+                key={ feature.title }
+                initial={ { opacity: 0, y: 20 } }
+                whileInView={ { opacity: 1, y: 0 } }
+                viewport={ { once: true } }
+                transition={ { delay: index * 0.1 } }
                 className="group p-6 bg-card rounded-2xl border border-border hover:border-primary/30 hover:shadow-card transition-all duration-300"
               >
                 <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                   <feature.icon className="h-6 w-6 text-primary" />
                 </div>
                 <h3 className="font-display text-xl font-semibold text-foreground mb-2">
-                  {feature.title}
+                  { feature.title }
                 </h3>
                 <p className="text-muted-foreground leading-relaxed">
-                  {feature.description}
+                  { feature.description }
                 </p>
               </motion.div>
-            ))}
+            )) }
           </div>
         </div>
       </section>
 
-      {/* Sample Places Section */}
+      {/* Sample Places Section */ }
       <section className="py-24 bg-gradient-warm">
         <div className="container mx-auto px-4">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            initial={ { opacity: 0, y: 20 } }
+            whileInView={ { opacity: 1, y: 0 } }
+            viewport={ { once: true } }
             className="text-center mb-12"
           >
             <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
@@ -210,23 +180,23 @@ export default function Index() {
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {samplePlaces.map((place, index) => (
+            { samplePlaces.map((place, index) => (
               <motion.div
-                key={place.name}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.15 }}
+                key={ place.name }
+                initial={ { opacity: 0, y: 20 } }
+                whileInView={ { opacity: 1, y: 0 } }
+                viewport={ { once: true } }
+                transition={ { delay: index * 0.15 } }
               >
-                <PlaceCard {...place} />
+                <PlaceCard { ...place } />
               </motion.div>
-            ))}
+            )) }
           </div>
 
           <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
+            initial={ { opacity: 0 } }
+            whileInView={ { opacity: 1 } }
+            viewport={ { once: true } }
             className="text-center mt-12"
           >
             <Link to="/chat">
@@ -239,7 +209,7 @@ export default function Index() {
         </div>
       </section>
 
-      {/* CTA Section */}
+      {/* CTA Section */ }
       <section className="py-24 bg-charcoal-dark relative overflow-hidden">
         <div className="absolute inset-0">
           <div className="absolute top-1/2 left-1/4 w-96 h-96 bg-coral/10 rounded-full blur-3xl" />
@@ -248,9 +218,9 @@ export default function Index() {
 
         <div className="container mx-auto px-4 relative z-10">
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
+            initial={ { opacity: 0, scale: 0.95 } }
+            whileInView={ { opacity: 1, scale: 1 } }
+            viewport={ { once: true } }
             className="max-w-3xl mx-auto text-center"
           >
             <h2 className="font-display text-4xl md:text-5xl font-bold text-cream mb-6">
