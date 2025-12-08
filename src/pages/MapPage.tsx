@@ -17,11 +17,35 @@ type ViewMode = "map" | "cards";
 
 const CASABLANCA_CENTER: [number, number] = [-7.5898, 33.5731];
 
+// Calculate distance between two coordinates using Haversine formula
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth's radius in kilometers
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) *
+    Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in kilometers
+}
+
+type PlaceWithDistance = Place & { distance?: number };
+
 function filterPlaces(
   places: Place[],
   filters: Record<string, string[]>,
-  userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>
-): Place[] {
+  userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>,
+  userLocation?: { latitude: number; longitude: number },
+  sortByNearest?: boolean
+): PlaceWithDistance[] {
   return places.filter((place) => {
     // Price filter
     if (filters.price && filters.price.length > 0) {
@@ -73,6 +97,30 @@ function filterPlaces(
     }
 
     return true;
+  }).map((place): PlaceWithDistance => {
+    // Add distance to place if user location is available
+    if (userLocation) {
+      const distance = calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        place.latitude,
+        place.longitude
+      );
+      return { ...place, distance };
+    }
+    return place;
+  }).filter((place) => {
+    // Filter by 20km radius if nearest is enabled
+    if (sortByNearest && userLocation && place.distance !== undefined) {
+      return place.distance <= 20; // 20km radius
+    }
+    return true;
+  }).sort((a, b) => {
+    // Sort by distance if sortByNearest is enabled and both places have distance
+    if (sortByNearest && a.distance !== undefined && b.distance !== undefined) {
+      return a.distance - b.distance;
+    }
+    return 0;
   });
 }
 
@@ -81,6 +129,10 @@ export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isNearestEnabled, setIsNearestEnabled] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
 
   const loadLocalStorageReactions = useCallback(() => {
     try {
@@ -188,9 +240,59 @@ export default function MapPage() {
     setFilters(newFilters);
   };
 
+  const getCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setIsLoadingLocation(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setIsNearestEnabled(true);
+        setIsLoadingLocation(false);
+      },
+      (error) => {
+        setLocationError("Unable to get your location. Please enable location services.");
+        setIsLoadingLocation(false);
+        setIsNearestEnabled(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      }
+    );
+  }, []);
+
+  const handleNearestToggle = useCallback(() => {
+    if (isNearestEnabled) {
+      setIsNearestEnabled(false);
+      setUserLocation(null);
+    } else {
+      if (userLocation) {
+        setIsNearestEnabled(true);
+      } else {
+        getCurrentLocation();
+      }
+    }
+  }, [isNearestEnabled, userLocation, getCurrentLocation]);
+
   const filteredPlaces = useMemo(() => {
-    return filterPlaces(casablancaPlaces, filters, userReactions);
-  }, [filters, userReactions]);
+    return filterPlaces(
+      casablancaPlaces,
+      filters,
+      userReactions,
+      userLocation || undefined,
+      isNearestEnabled
+    );
+  }, [filters, userReactions, userLocation, isNearestEnabled]);
 
   const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => {
     const currentReactions = userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
@@ -224,13 +326,20 @@ export default function MapPage() {
 
             <div className="flex items-center gap-3">
               <Button
-                variant="outline"
+                variant={ isNearestEnabled ? "default" : "outline" }
                 size="sm"
-                className="text-muted-foreground"
+                className={ cn(
+                  isNearestEnabled && "bg-primary text-primary-foreground"
+                ) }
+                onClick={ handleNearestToggle }
+                disabled={ isLoadingLocation }
               >
-                <Locate className="h-4 w-4 mr-1" />
-                Nearest
+                <Locate className={ cn("h-4 w-4 mr-1", isLoadingLocation && "animate-spin") } />
+                { isLoadingLocation ? "Locating..." : "Nearest" }
               </Button>
+              { locationError && (
+                <span className="text-xs text-destructive">{ locationError }</span>
+              ) }
 
               {/* View Toggle */ }
               <div className="flex bg-secondary rounded-lg p-1">
@@ -266,7 +375,7 @@ export default function MapPage() {
         {/* Content Area */ }
         <div className="flex-1">
           { viewMode === "map" ? (
-            <MapView places={ filteredPlaces } />
+            <MapView places={ filteredPlaces } userLocation={ userLocation } />
           ) : (
             <CardsView
               places={ filteredPlaces }
@@ -282,9 +391,10 @@ export default function MapPage() {
 
 interface MapViewProps {
   places: Place[];
+  userLocation?: { latitude: number; longitude: number } | null;
 }
 
-function MapView({ places }: MapViewProps) {
+function MapView({ places, userLocation }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -302,11 +412,18 @@ function MapView({ places }: MapViewProps) {
     mapboxgl.accessToken = token;
 
     const config = getMapConfig(token);
+    // Use user location if available, otherwise use Casablanca center
+    const initialCenter = userLocation
+      ? [userLocation.longitude, userLocation.latitude] as [number, number]
+      : CASABLANCA_CENTER;
+
+    const initialZoom = userLocation ? 14 : DEFAULT_ZOOM;
+
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: config.style || 'mapbox://styles/mapbox/streets-v12',
-      center: CASABLANCA_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center: initialCenter,
+      zoom: initialZoom,
     });
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -356,14 +473,37 @@ function MapView({ places }: MapViewProps) {
         const placesWithCoords = places.filter(p => p.latitude && p.longitude);
         if (placesWithCoords.length > 0) {
           const bounds = new mapboxgl.LngLatBounds();
+
+          // Add user location to bounds if available
+          if (userLocation) {
+            bounds.extend([userLocation.longitude, userLocation.latitude]);
+          }
+
           placesWithCoords.forEach(place => {
             bounds.extend([place.longitude, place.latitude]);
           });
+
           map.current.fitBounds(bounds, {
             padding: { top: 50, bottom: 50, left: 50, right: 50 },
             maxZoom: 14
           });
+        } else if (userLocation) {
+          // If no places but user location available, center on user location
+          map.current.flyTo({
+            center: [userLocation.longitude, userLocation.latitude],
+            zoom: 14,
+          });
+        } else {
+          // Если нет мест, центрируем на Касабланку
+          map.current.setCenter(CASABLANCA_CENTER);
+          map.current.setZoom(DEFAULT_ZOOM);
         }
+      } else if (userLocation) {
+        // If no places but user location available, center on user location
+        map.current.flyTo({
+          center: [userLocation.longitude, userLocation.latitude],
+          zoom: 14,
+        });
       } else {
         // Если нет мест, центрируем на Касабланку
         map.current.setCenter(CASABLANCA_CENTER);
@@ -378,6 +518,17 @@ function MapView({ places }: MapViewProps) {
       }
     };
   }, [places]);
+
+  // Update map center when user location changes
+  useEffect(() => {
+    if (!map.current || !userLocation) return;
+
+    map.current.flyTo({
+      center: [userLocation.longitude, userLocation.latitude],
+      zoom: 14,
+      duration: 1000,
+    });
+  }, [userLocation]);
 
   if (mapError) {
     return (
