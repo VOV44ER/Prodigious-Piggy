@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { PlaceCard } from "@/components/place/PlaceCard";
@@ -9,29 +9,19 @@ import { motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
 import { getMapboxToken, getMapConfig, DEFAULT_ZOOM } from "@/integrations/mapbox/client";
 import { casablancaPlaces, type Place } from "@/data/casablanca-places";
+import { useAuth } from "@/hooks/useAuth";
+import { getUserReactionsForPlaces, toggleReactionForPlace } from "@/hooks/useReactions";
+import { supabase } from "@/integrations/supabase/client";
 
 type ViewMode = "map" | "cards";
 
 const CASABLANCA_CENTER: [number, number] = [-7.5898, 33.5731];
 
-function getPlaceReactions(placeName: string): { favourites: boolean; wantToGo: boolean } {
-  try {
-    const reactions = localStorage.getItem('place_reactions');
-    if (!reactions) return { favourites: false, wantToGo: false };
-
-    const parsed = JSON.parse(reactions);
-    const placeReactions = parsed[placeName] || {};
-
-    return {
-      favourites: placeReactions.heart === true || placeReactions.love === true,
-      wantToGo: placeReactions.bookmark === true,
-    };
-  } catch {
-    return { favourites: false, wantToGo: false };
-  }
-}
-
-function filterPlaces(places: Place[], filters: Record<string, string[]>): Place[] {
+function filterPlaces(
+  places: Place[],
+  filters: Record<string, string[]>,
+  userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>
+): Place[] {
   return places.filter((place) => {
     // Price filter
     if (filters.price && filters.price.length > 0) {
@@ -67,7 +57,7 @@ function filterPlaces(places: Place[], filters: Record<string, string[]>): Place
 
     // List filter (favourites, want_to_go)
     if (filters.list && filters.list.length > 0) {
-      const reactions = getPlaceReactions(place.name);
+      const reactions = userReactions[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
       const matches = filters.list.some((listType) => {
         if (listType === 'favourites') {
           return reactions.favourites;
@@ -87,16 +77,132 @@ function filterPlaces(places: Place[], filters: Record<string, string[]>): Place
 }
 
 export default function MapPage() {
+  const { user } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
+
+  const loadLocalStorageReactions = useCallback(() => {
+    try {
+      const reactions = localStorage.getItem('place_reactions');
+      if (!reactions) return;
+
+      const parsed = JSON.parse(reactions);
+      const result: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> = {};
+
+      casablancaPlaces.forEach(place => {
+        const placeReactions = parsed[place.name] || {};
+        result[place.name] = {
+          favourites: placeReactions.heart === true || placeReactions.love === true,
+          wantToGo: placeReactions.bookmark === true || placeReactions.want_to_go === true,
+          like: placeReactions.like === true,
+          dislike: placeReactions.dislike === true,
+        };
+      });
+
+      setUserReactions(result);
+    } catch {
+      // Ignore errors
+    }
+  }, []);
+
+  const loadUserReactions = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const placeNames = casablancaPlaces.map(p => p.name);
+      const reactions = await getUserReactionsForPlaces(user.id, placeNames);
+      setUserReactions(reactions);
+    } catch (error) {
+      console.error('Error loading user reactions:', error);
+      loadLocalStorageReactions();
+    }
+  }, [user, loadLocalStorageReactions]);
+
+  useEffect(() => {
+    if (user) {
+      loadUserReactions();
+
+      // Subscribe to changes in user_reactions with debounce
+      let timeoutId: NodeJS.Timeout;
+      const channel = supabase
+        .channel('user_reactions_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'user_reactions',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            // Debounce to prevent multiple rapid calls
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => {
+              loadUserReactions();
+            }, 300);
+          }
+        )
+        .subscribe();
+
+      return () => {
+        clearTimeout(timeoutId);
+        supabase.removeChannel(channel);
+      };
+    } else {
+      // Fallback to localStorage if not authenticated
+      loadLocalStorageReactions();
+
+      // Listen to localStorage changes (for same-tab updates)
+      let timeoutId: NodeJS.Timeout;
+      const handleStorageChange = (e: StorageEvent) => {
+        if (e.key === 'place_reactions') {
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+            loadLocalStorageReactions();
+          }, 300);
+        }
+      };
+
+      // Also listen to custom event for same-tab updates
+      const handleCustomStorageChange = () => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          loadLocalStorageReactions();
+        }, 300);
+      };
+
+      window.addEventListener('storage', handleStorageChange);
+      window.addEventListener('place_reactions_updated', handleCustomStorageChange);
+
+      return () => {
+        clearTimeout(timeoutId);
+        window.removeEventListener('storage', handleStorageChange);
+        window.removeEventListener('place_reactions_updated', handleCustomStorageChange);
+      };
+    }
+  }, [user, loadUserReactions, loadLocalStorageReactions]);
+
 
   const handleFilterChange = (newFilters: Record<string, string[]>) => {
     setFilters(newFilters);
   };
 
   const filteredPlaces = useMemo(() => {
-    return filterPlaces(casablancaPlaces, filters);
-  }, [filters]);
+    return filterPlaces(casablancaPlaces, filters, userReactions);
+  }, [filters, userReactions]);
+
+  const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => {
+    const currentReactions = userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
+
+    // Optimistically update UI
+    const newReactions = await toggleReactionForPlace(placeName, currentReactions, type);
+
+    setUserReactions(prev => ({
+      ...prev,
+      [placeName]: newReactions,
+    }));
+  }, [userReactions]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -162,7 +268,11 @@ export default function MapPage() {
           { viewMode === "map" ? (
             <MapView places={ filteredPlaces } />
           ) : (
-            <CardsView places={ filteredPlaces } />
+            <CardsView
+              places={ filteredPlaces }
+              userReactions={ userReactions }
+              onReactionToggle={ handleReactionToggle }
+            />
           ) }
         </div>
       </main>
@@ -298,7 +408,13 @@ interface CardsViewProps {
   places: Place[];
 }
 
-function CardsView({ places }: CardsViewProps) {
+interface CardsViewProps {
+  places: Place[];
+  userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>;
+  onReactionToggle: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => void;
+}
+
+function CardsView({ places, userReactions, onReactionToggle }: CardsViewProps) {
   if (places.length === 0) {
     return (
       <div className="container mx-auto px-4 py-12">
@@ -327,7 +443,11 @@ function CardsView({ places }: CardsViewProps) {
             animate={ { opacity: 1, y: 0 } }
             transition={ { delay: index * 0.05 } }
           >
-            <PlaceCard { ...place } />
+            <PlaceCard
+              { ...place }
+              reactions={ userReactions[place.name] }
+              onReactionToggle={ onReactionToggle }
+            />
           </motion.div>
         )) }
       </div>
