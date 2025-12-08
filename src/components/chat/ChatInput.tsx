@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Send, Mic } from "lucide-react";
+import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,16 +34,6 @@ export function ChatInput({ onSend, disabled, placeholder = "Ask Piggy about pla
             "focus:outline-none text-sm"
           ) }
         />
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:text-foreground"
-          title="Voice input (coming soon)"
-          disabled
-        >
-          <Mic className="h-5 w-5" />
-        </Button>
         <Button
           type="submit"
           size="icon"
