@@ -9,6 +9,7 @@ import AuthPage from "./pages/AuthPage";
 import ChatPage from "./pages/ChatPage";
 import MapPage from "./pages/MapPage";
 import ProfilePage from "./pages/ProfilePage";
+import SubscriptionPage from "./pages/SubscriptionPage";
 import PlacePage from "./pages/PlacePage";
 import NotFound from "./pages/NotFound";
 
@@ -44,6 +45,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/subscription"
+            element={
+              <ProtectedRoute>
+                <SubscriptionPage />
               </ProtectedRoute>
             }
           />
