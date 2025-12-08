@@ -19,6 +19,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserReactionsForPlaces } from "@/hooks/useReactions";
 import { casablancaPlaces } from "@/data/casablanca-places";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -27,6 +28,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<string | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
 
   const loadReactions = useCallback(async () => {
     try {
@@ -129,9 +131,30 @@ export default function ProfilePage() {
     );
   }, [getLocationName]);
 
+  const loadUserProfile = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+
+      if (!error && data?.full_name) {
+        setUserName(data.full_name);
+      } else if (user.user_metadata?.full_name) {
+        setUserName(user.user_metadata.full_name);
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
     loadReactions();
     getCurrentLocation();
+    loadUserProfile();
 
     const handleReactionsUpdate = () => {
       loadReactions();
@@ -142,7 +165,7 @@ export default function ProfilePage() {
     return () => {
       window.removeEventListener('place_reactions_updated', handleReactionsUpdate);
     };
-  }, [loadReactions, getCurrentLocation]);
+  }, [loadReactions, getCurrentLocation, loadUserProfile]);
 
   const stats = [
     { label: "Favourites", value: favouritesCount, icon: Heart, color: "text-coral" },
@@ -188,7 +211,7 @@ export default function ProfilePage() {
               {/* User Info */ }
               <div className="text-center md:text-left">
                 <h1 className="font-display text-3xl font-bold text-cream mb-1">
-                  Welcome Back!
+                  { userName ? `Welcome Back, ${userName}!` : "Welcome Back!" }
                 </h1>
                 <p className="text-cream/60 flex items-center justify-center md:justify-start gap-2">
                   <Mail className="h-4 w-4" />
