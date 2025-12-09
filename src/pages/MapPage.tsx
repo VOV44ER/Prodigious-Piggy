@@ -319,10 +319,10 @@ export default function MapPage() {
   }, [userReactions]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Navbar />
 
-      <main className="flex-1 pt-16 flex flex-col">
+      <main className="flex-1 pt-16 flex flex-col min-h-0 overflow-hidden">
         {/* Filter Bar */ }
         <FilterBar onFilterChange={ handleFilterChange } filters={ filters } />
 
@@ -385,15 +385,17 @@ export default function MapPage() {
         </div>
 
         {/* Content Area */ }
-        <div className="flex-1">
+        <div className="flex-1 overflow-hidden">
           { viewMode === "map" ? (
             <MapView places={ filteredPlaces } userLocation={ userLocation } />
           ) : (
-            <CardsView
-              places={ filteredPlaces }
-              userReactions={ userReactions }
-              onReactionToggle={ handleReactionToggle }
-            />
+            <div className="h-full overflow-y-auto">
+              <CardsView
+                places={ filteredPlaces }
+                userReactions={ userReactions }
+                onReactionToggle={ handleReactionToggle }
+              />
+            </div>
           ) }
         </div>
       </main>
