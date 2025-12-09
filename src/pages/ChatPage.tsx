@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -93,6 +93,7 @@ export default function ChatPage() {
   const [sessionToDelete, setSessionToDelete] = useState<ChatSession | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) || null,
@@ -298,6 +299,12 @@ export default function ChatPage() {
     setMessages(initialMessages);
   };
 
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+
   const confirmDeleteSession = (session: ChatSession) => {
     setSessionToDelete(session);
   };
@@ -328,12 +335,12 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Navbar />
 
-      <main className="flex-1 pt-16 flex">
+      <main className="flex-1 pt-16 flex min-h-0 overflow-hidden">
         {/* Sidebar - Chat History */ }
-        <div className="w-64 border-r border-border bg-card/30 flex flex-col">
+        <div className="w-64 border-r border-border bg-card/30 flex flex-col min-h-0">
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-foreground">Chat History</h2>
@@ -394,7 +401,7 @@ export default function ChatPage() {
         </div>
 
         {/* Main Chat Area */ }
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col min-h-0">
           {/* Header */ }
           <div className="border-b border-border bg-card/50 backdrop-blur-sm">
             <div className="px-6 py-4">
@@ -445,6 +452,7 @@ export default function ChatPage() {
                     </div>
                   )) }
                 </AnimatePresence>
+                <div ref={ messagesEndRef } />
 
                 {/* Typing Indicator */ }
                 { isTyping && (
