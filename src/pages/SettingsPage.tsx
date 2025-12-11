@@ -9,15 +9,16 @@ import {
     User,
     Lock,
     Image as ImageIcon,
-    Upload,
     Loader2,
+    Sparkles,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { AvataaarsPicker } from "@/components/AvataaarsPicker";
 
 export default function SettingsPage() {
     const { user, signOut } = useAuth();
@@ -32,8 +33,8 @@ export default function SettingsPage() {
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+    const [avataaarsPickerOpen, setAvataaarsPickerOpen] = useState(false);
 
     useEffect(() => {
         loadProfile();
@@ -72,55 +73,17 @@ export default function SettingsPage() {
         }
     };
 
-    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file || !user) return;
-
-        if (!file.type.startsWith('image/')) {
-            toast({
-                title: "Error",
-                description: "Please select an image file",
-                variant: "destructive",
-            });
-            return;
-        }
-
-        if (file.size > 5 * 1024 * 1024) {
-            toast({
-                title: "Error",
-                description: "Image size must be less than 5MB",
-                variant: "destructive",
-            });
-            return;
-        }
+    const handleAvataaarsSelect = async (avatarUrl: string) => {
+        if (!user) return;
 
         setAvatarLoading(true);
 
         try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-            const filePath = `${fileName}`;
-
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: true,
-                });
-
-            if (uploadError) {
-                throw uploadError;
-            }
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
-
             const { error: updateError } = await supabase
                 .from('profiles')
                 .upsert({
                     id: user.id,
-                    avatar_url: publicUrl,
+                    avatar_url: avatarUrl,
                     full_name: profile?.full_name || fullName || null,
                 });
 
@@ -128,8 +91,8 @@ export default function SettingsPage() {
                 throw updateError;
             }
 
-            setAvatarPreview(publicUrl);
-            setProfile(prev => prev ? { ...prev, avatar_url: publicUrl } : null);
+            setAvatarPreview(avatarUrl);
+            setProfile(prev => prev ? { ...prev, avatar_url: avatarUrl } : null);
 
             window.dispatchEvent(new Event('profile_updated'));
 
@@ -138,10 +101,10 @@ export default function SettingsPage() {
                 description: "Avatar updated successfully",
             });
         } catch (error: any) {
-            console.error('Error uploading avatar:', error);
+            console.error('Error updating avatar:', error);
             toast({
                 title: "Error",
-                description: error.message || "Failed to upload avatar",
+                description: error.message || "Failed to update avatar",
                 variant: "destructive",
             });
         } finally {
@@ -281,7 +244,7 @@ export default function SettingsPage() {
                                         <div>
                                             <CardTitle>Avatar</CardTitle>
                                             <CardDescription>
-                                                Upload a profile picture
+                                                Create your avatar
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -307,24 +270,14 @@ export default function SettingsPage() {
                                             ) }
                                         </div>
                                         <div className="flex-1">
-                                            <input
-                                                ref={ fileInputRef }
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={ handleAvatarUpload }
-                                                className="hidden"
-                                            />
                                             <Button
-                                                onClick={ () => fileInputRef.current?.click() }
+                                                onClick={ () => setAvataaarsPickerOpen(true) }
                                                 disabled={ avatarLoading }
                                                 variant="outline"
                                             >
-                                                <Upload className="h-4 w-4 mr-2" />
-                                                { avatarLoading ? "Uploading..." : "Upload Avatar" }
+                                                <Sparkles className="h-4 w-4 mr-2" />
+                                                { avatarLoading ? "Saving..." : "Create Avatar" }
                                             </Button>
-                                            <p className="text-sm text-muted-foreground mt-2">
-                                                JPG, PNG or GIF. Max size 5MB
-                                            </p>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -424,6 +377,12 @@ export default function SettingsPage() {
                     </div>
                 </div>
             </main>
+
+            <AvataaarsPicker
+                open={ avataaarsPickerOpen }
+                onOpenChange={ setAvataaarsPickerOpen }
+                onSelect={ handleAvataaarsSelect }
+            />
         </div>
     );
 }
