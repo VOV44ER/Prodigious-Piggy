@@ -11,7 +11,7 @@ import {
   Gift,
   ChevronRight,
   Mail,
-  Globe
+  BookOpen
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -127,7 +127,6 @@ export default function ProfilePage() {
   const stats = [
     { label: "Favourites", value: favouritesCount, icon: Heart, color: "text-coral" },
     { label: "Want to Go", value: wantToGoCount, icon: Plus, color: "text-gold" },
-    { label: "Cities Explored", value: 5, icon: Globe, color: "text-sage" },
   ];
 
   const menuItems = [
@@ -136,6 +135,7 @@ export default function ProfilePage() {
       items: [
         { label: "Favourites", icon: Heart, href: "/map?list=favourites", badge: favouritesCount },
         { label: "Want to Go", icon: Plus, href: "/map?list=want_to_go", badge: wantToGoCount },
+        { label: "Piggy Passport", icon: BookOpen, href: "/passport" },
       ],
     },
     {
@@ -220,7 +220,7 @@ export default function ProfilePage() {
             transition={ { delay: 0.1 } }
             className="bg-card rounded-2xl shadow-card border border-border p-6"
           >
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               { stats.map((stat) => (
                 <div key={ stat.label } className="text-center">
                   <div className={ cn("inline-flex mb-2", stat.color) }>

@@ -12,6 +12,7 @@ import { getMapboxToken, getMapConfig, DEFAULT_ZOOM } from "@/integrations/mapbo
 import { casablancaPlaces, type Place } from "@/data/casablanca-places";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserReactionsForPlaces, toggleReactionForPlace } from "@/hooks/useReactions";
+import { useCuisineReactions, type CuisineReactions } from "@/hooks/useCuisineReactions";
 import { supabase } from "@/integrations/supabase/client";
 
 type ViewMode = "map" | "cards";
@@ -44,10 +45,19 @@ function filterPlaces(
   places: Place[],
   filters: Record<string, string[]>,
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>,
+  cuisineReactions: CuisineReactions,
   userLocation?: { latitude: number; longitude: number },
   sortByNearest?: boolean
 ): PlaceWithDistance[] {
   return places.filter((place) => {
+    // Exclude places with disliked cuisines
+    if (place.cuisine) {
+      const cuisineReaction = cuisineReactions[place.cuisine];
+      if (cuisineReaction === 'dislike') {
+        return false;
+      }
+    }
+
     // Price filter
     if (filters.price && filters.price.length > 0) {
       const priceValues = filters.price.map((p) => parseInt(p, 10));
@@ -117,6 +127,17 @@ function filterPlaces(
     }
     return true;
   }).sort((a, b) => {
+    // Prioritize places with liked cuisines
+    const aCuisineReaction = a.cuisine ? cuisineReactions[a.cuisine] : null;
+    const bCuisineReaction = b.cuisine ? cuisineReactions[b.cuisine] : null;
+
+    if (aCuisineReaction === 'like' && bCuisineReaction !== 'like') {
+      return -1;
+    }
+    if (bCuisineReaction === 'like' && aCuisineReaction !== 'like') {
+      return 1;
+    }
+
     // Sort by distance if sortByNearest is enabled and both places have distance
     if (sortByNearest && a.distance !== undefined && b.distance !== undefined) {
       return a.distance - b.distance;
@@ -131,6 +152,7 @@ export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
+  const { cuisineReactions } = useCuisineReactions();
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isNearestEnabled, setIsNearestEnabled] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -301,10 +323,11 @@ export default function MapPage() {
       casablancaPlaces,
       filters,
       userReactions,
+      cuisineReactions,
       userLocation || undefined,
       isNearestEnabled
     );
-  }, [filters, userReactions, userLocation, isNearestEnabled]);
+  }, [filters, userReactions, cuisineReactions, userLocation, isNearestEnabled]);
 
   const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => {
     const currentReactions = userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };

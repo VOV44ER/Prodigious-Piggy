@@ -13,6 +13,7 @@ import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import PlacePage from "./pages/PlacePage";
+import PassportPage from "./pages/PassportPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -64,6 +65,14 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <SubscriptionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/passport"
+            element={
+              <ProtectedRoute>
+                <PassportPage />
               </ProtectedRoute>
             }
           />
