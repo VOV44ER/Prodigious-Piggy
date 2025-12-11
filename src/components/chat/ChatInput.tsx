@@ -9,7 +9,7 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({ onSend, disabled, placeholder = "Ask Piggy about places in Casablanca..." }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder = "Ask The Piggy about places in Casablanca..." }: ChatInputProps) {
   const [message, setMessage] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {

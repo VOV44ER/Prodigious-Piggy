@@ -21,7 +21,7 @@ const features = [
   {
     icon: MessageCircle,
     title: "AI-Powered Discovery",
-    description: "Chat with Piggy to find the perfect spot. Just describe what you're in the mood for.",
+    description: "Chat with The Piggy to find the perfect spot. Just describe what you're in the mood for.",
   },
   {
     icon: Map,
@@ -31,7 +31,7 @@ const features = [
   {
     icon: Heart,
     title: "Smart Lists",
-    description: "Favourites and Want to Go lists auto-populate from your reactions.",
+    description: "Favourites and Want to Go lists auto-populate from your interactions and reactions.",
   },
   {
     icon: Globe,
@@ -41,7 +41,7 @@ const features = [
   {
     icon: Sparkles,
     title: "Personalized",
-    description: "Your preferences shape future recommendations. Piggy learns what you love.",
+    description: "Your preferences shape future recommendations. The Piggy learns what you love.",
   },
   {
     icon: Shield,
@@ -133,11 +133,11 @@ export default function Index() {
             className="text-center mb-16"
           >
             <h2 className="font-display text-4xl md:text-5xl font-bold text-foreground mb-4">
-              Why Foodies Choose Piggy
+              Why Foodies Choose The Piggy
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Traditional discovery tools fail to give you flexible, trustworthy experiences.
-              Piggy is different.
+              Traditional discovery tools fail to give you authentic, trustworthy experiences.
+              The Piggy is different.
             </p>
           </motion.div>
 
@@ -179,7 +179,7 @@ export default function Index() {
               Curated by Experts, Enhanced by AI
             </h2>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-              Every place in Piggy is hand-selected and verified. Here's a taste of what you'll discover.
+              Every place in The Piggy is hand-selected and verified. Here's a taste of what you'll discover.
             </p>
           </motion.div>
 
@@ -231,7 +231,7 @@ export default function Index() {
               Ready to Discover Your Next <span className="text-gradient">Favourite Spot?</span>
             </h2>
             <p className="text-cream/60 text-lg mb-10">
-              Join thousands of foodies who trust Piggy for their culinary adventures.
+              Join other foodies and start eating like a prodigious piggy!
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/signup">

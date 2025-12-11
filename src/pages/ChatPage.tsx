@@ -49,7 +49,7 @@ interface ChatSession {
 const initialMessages: Message[] = [
   {
     id: "1",
-    content: "Hey there! 🐷 I'm Piggy, your foodie discovery assistant for Casablanca, Morocco. Ask me anything — like \"Best Moroccan restaurants in Casablanca\" or \"Where to find great coffee shops\" and I'll help you discover the best curated spots in the city!",
+    content: "Hey there! 🐷 I'm The Piggy, your foodie discovery assistant for Casablanca, Morocco. Ask me anything — like \"Best Moroccan restaurants in Casablanca\" or \"Where to find great coffee shops\" and I'll help you discover the best curated spots in the city!",
     isUser: false,
     timestamp: new Date(),
   },
@@ -62,7 +62,7 @@ const suggestedQueries = [
   "Traditional Moroccan bakeries",
 ];
 
-const SYSTEM_PROMPT = `You are Piggy, a friendly and knowledgeable foodie discovery assistant specializing in Casablanca, Morocco. You help users find the best restaurants, cafes, bakeries, and dining spots in Casablanca.
+const SYSTEM_PROMPT = `You are The Piggy, a friendly and knowledgeable foodie discovery assistant specializing in Casablanca, Morocco. You help users find the best restaurants, cafes, bakeries, and dining spots in Casablanca.
 
 Available places in Casablanca include:
 - % Arabica (Cafe, Coffee) - N°144 angle boulevard d'anfa et, Rue La Fontaine
@@ -410,7 +410,7 @@ export default function ChatPage() {
                   <Sparkles className="h-5 w-5 text-charcoal-dark" />
                 </div>
                 <div>
-                  <h1 className="font-display font-semibold text-foreground">Chat with Piggy</h1>
+                  <h1 className="font-display font-semibold text-foreground">Chat with The Piggy</h1>
                   <p className="text-sm text-muted-foreground">
                     { selectedSession ? selectedSession.title || "New Chat" : "New Chat" }
                   </p>
