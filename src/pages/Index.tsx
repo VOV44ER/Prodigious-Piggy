@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/layout/Navbar";
@@ -7,6 +8,14 @@ import { motion } from "framer-motion";
 import { MessageCircle, Map, Heart, Sparkles, Globe, Shield, ChevronRight } from "lucide-react";
 import heroDiner from "@/assets/hero-diner.jpg";
 import { casablancaPlaces } from "@/data/casablanca-places";
+import { WorldCoverageHeatmap } from "@/components/WorldCoverageHeatmap";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const features = [
   {
@@ -44,6 +53,8 @@ const features = [
 const samplePlaces = casablancaPlaces.slice(0, 3);
 
 export default function Index() {
+  const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
@@ -70,54 +81,47 @@ export default function Index() {
               animate={ { opacity: 1, y: 0 } }
               transition={ { duration: 0.8 } }
             >
-              <span className="inline-block px-4 py-1.5 bg-coral/20 text-coral-light text-sm font-medium rounded-full mb-6 backdrop-blur-sm border border-coral/30">
-                🐷 AI-Powered Foodie Discovery
-              </span>
-
               <h1 className="font-display text-5xl md:text-7xl font-bold text-cream mb-6 leading-tight">
                 Discover Places <br />
                 <span className="text-gradient">You'll Actually Love</span>
               </h1>
 
               <p className="text-lg md:text-xl text-cream/70 mb-10 max-w-2xl mx-auto leading-relaxed">
-                Piggy combines trusted curation with AI-powered discovery. Find hidden gems,
-                track your favourites, and get personalized recommendations that improve with every interaction.
+                The Piggy combines trusted human curation with AI-powered discovery. Find hidden gems,
+                track your favourites, and get personalised recommendations that improve with every interaction from over 14,000 places.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/signup">
-                  <Button variant="hero" size="xl">
-                    Start Free Trial
-                    <ChevronRight className="h-5 w-5" />
-                  </Button>
-                </Link>
-                <Link to="/chat">
-                  <Button variant="hero-outline" size="xl">
-                    <MessageCircle className="h-5 w-5" />
-                    Try the Chat
-                  </Button>
-                </Link>
+              <div className="mb-10">
+                <Button
+                  variant="hero"
+                  size="xl"
+                  onClick={ () => setIsMapDialogOpen(true) }
+                >
+                  <Map className="h-5 w-5 mr-2" />
+                  View the map
+                </Button>
               </div>
             </motion.div>
           </div>
         </div>
-
-        {/* Scroll indicator */ }
-        <motion.div
-          initial={ { opacity: 0 } }
-          animate={ { opacity: 1 } }
-          transition={ { delay: 1.5 } }
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        >
-          <div className="w-6 h-10 border-2 border-cream/30 rounded-full flex justify-center pt-2">
-            <motion.div
-              animate={ { y: [0, 8, 0] } }
-              transition={ { repeat: Infinity, duration: 1.5 } }
-              className="w-1.5 h-1.5 bg-cream/50 rounded-full"
-            />
-          </div>
-        </motion.div>
       </section>
+
+      {/* Map Dialog */ }
+      <Dialog open={ isMapDialogOpen } onOpenChange={ setIsMapDialogOpen }>
+        <DialogContent className="max-w-6xl w-[95vw] max-h-[90vh] p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
+            <DialogTitle className="text-2xl font-display">Global Coverage</DialogTitle>
+            <DialogDescription>
+              Explore over 14,000 curated places across the world. The heat map shows where The Piggy has coverage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto bg-charcoal-dark p-4">
+            <div className="w-full h-full min-h-[500px]">
+              <WorldCoverageHeatmap />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Features Section */ }
       <section className="py-24 bg-background">
