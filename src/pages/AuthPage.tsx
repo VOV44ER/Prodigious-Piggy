@@ -17,14 +17,14 @@ const passwordSchema = z.string().min(6, "Password must be at least 6 characters
 export default function AuthPage() {
   const navigate = useNavigate();
   const { signIn, signUp, isAuthenticated, loading } = useAuth();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // Login form
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  
+
   // Signup form
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
@@ -33,13 +33,13 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
-      navigate("/");
+      navigate("/chat");
     }
   }, [isAuthenticated, loading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(loginEmail);
       passwordSchema.parse(loginPassword);
@@ -57,20 +57,20 @@ export default function AuthPage() {
     if (error) {
       toast({
         title: "Login failed",
-        description: error.message === "Invalid login credentials" 
-          ? "Invalid email or password" 
+        description: error.message === "Invalid login credentials"
+          ? "Invalid email or password"
           : error.message,
         variant: "destructive",
       });
     } else {
       toast({ title: "Welcome back!" });
-      navigate("/");
+      navigate("/chat");
     }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     try {
       emailSchema.parse(signupEmail);
       passwordSchema.parse(signupPassword);
@@ -117,7 +117,7 @@ export default function AuthPage() {
       <Card className="w-full max-w-md border-border/50 shadow-soft">
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
-            <img src={logo} alt="The Prodigious Piggy" className="h-16 w-16" />
+            <img src={ logo } alt="The Prodigious Piggy" className="h-16 w-16" />
           </div>
           <CardTitle className="font-display text-2xl">The Prodigious Piggy</CardTitle>
           <CardDescription>Sign in or create an account</CardDescription>
@@ -130,15 +130,15 @@ export default function AuthPage() {
             </TabsList>
 
             <TabsContent value="login">
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={ handleLogin } className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="login-email">Email</Label>
                   <Input
                     id="login-email"
                     type="email"
                     placeholder="your@email.com"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
+                    value={ loginEmail }
+                    onChange={ (e) => setLoginEmail(e.target.value) }
                     required
                   />
                 </div>
@@ -147,10 +147,10 @@ export default function AuthPage() {
                   <div className="relative">
                     <Input
                       id="login-password"
-                      type={showPassword ? "text" : "password"}
+                      type={ showPassword ? "text" : "password" }
                       placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
+                      value={ loginPassword }
+                      onChange={ (e) => setLoginPassword(e.target.value) }
                       required
                     />
                     <Button
@@ -158,29 +158,29 @@ export default function AuthPage() {
                       variant="ghost"
                       size="icon"
                       className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={ () => setShowPassword(!showPassword) }
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      { showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" /> }
                     </Button>
                   </div>
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                <Button type="submit" className="w-full" disabled={ isLoading }>
+                  { isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null }
                   Sign In
                 </Button>
               </form>
             </TabsContent>
 
             <TabsContent value="signup">
-              <form onSubmit={handleSignup} className="space-y-4">
+              <form onSubmit={ handleSignup } className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="signup-name">Name</Label>
                   <Input
                     id="signup-name"
                     type="text"
                     placeholder="Your name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
+                    value={ fullName }
+                    onChange={ (e) => setFullName(e.target.value) }
                   />
                 </div>
                 <div className="space-y-2">
@@ -189,8 +189,8 @@ export default function AuthPage() {
                     id="signup-email"
                     type="email"
                     placeholder="your@email.com"
-                    value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
+                    value={ signupEmail }
+                    onChange={ (e) => setSignupEmail(e.target.value) }
                     required
                   />
                 </div>
@@ -199,10 +199,10 @@ export default function AuthPage() {
                   <div className="relative">
                     <Input
                       id="signup-password"
-                      type={showPassword ? "text" : "password"}
+                      type={ showPassword ? "text" : "password" }
                       placeholder="At least 6 characters"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
+                      value={ signupPassword }
+                      onChange={ (e) => setSignupPassword(e.target.value) }
                       required
                     />
                     <Button
@@ -210,9 +210,9 @@ export default function AuthPage() {
                       variant="ghost"
                       size="icon"
                       className="absolute right-0 top-0 h-full px-3"
-                      onClick={() => setShowPassword(!showPassword)}
+                      onClick={ () => setShowPassword(!showPassword) }
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      { showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" /> }
                     </Button>
                   </div>
                 </div>
@@ -222,13 +222,13 @@ export default function AuthPage() {
                     id="signup-confirm"
                     type="password"
                     placeholder="••••••••"
-                    value={signupConfirmPassword}
-                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                    value={ signupConfirmPassword }
+                    onChange={ (e) => setSignupConfirmPassword(e.target.value) }
                     required
                   />
                 </div>
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                <Button type="submit" className="w-full" disabled={ isLoading }>
+                  { isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null }
                   Create Account
                 </Button>
               </form>
