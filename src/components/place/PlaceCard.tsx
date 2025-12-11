@@ -1,4 +1,4 @@
-import { Heart, Bookmark, ThumbsUp, ThumbsDown, MapPin, DollarSign, Star } from "lucide-react";
+import { Heart, Plus, ThumbsUp, ThumbsDown, MapPin, DollarSign, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useReactions } from "@/hooks/useReactions";
@@ -150,7 +150,7 @@ export function PlaceCard({
             fillColor="coral"
           />
           <ReactionButton
-            icon={ Bookmark }
+            icon={ Plus }
             active={ uiReaction === "bookmark" }
             onClick={ () => handleReaction("bookmark") }
             label="Want to Go"
@@ -204,6 +204,8 @@ function ReactionButton({ icon: Icon, active, onClick, label, activeColor, fillC
     return colorMap[fillColor] || "currentColor";
   };
 
+  const isPlusIcon = label === "Want to Go";
+
   return (
     <button
       onClick={ onClick }
@@ -217,8 +219,8 @@ function ReactionButton({ icon: Icon, active, onClick, label, activeColor, fillC
     >
       <Icon
         className="h-4 w-4"
-        fill={ getFillColor() }
-        strokeWidth={ active ? 2.5 : 2 }
+        fill={ isPlusIcon ? "none" : getFillColor() }
+        strokeWidth={ active && isPlusIcon ? 3 : active ? 2.5 : 2 }
       />
     </button>
   );

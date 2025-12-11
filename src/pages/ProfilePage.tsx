@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import {
   User,
   Heart,
-  Bookmark,
+  Plus,
   MapPin,
   Settings,
   CreditCard,
@@ -183,7 +183,7 @@ export default function ProfilePage() {
 
   const stats = [
     { label: "Favourites", value: favouritesCount, icon: Heart, color: "text-coral" },
-    { label: "Want to Go", value: wantToGoCount, icon: Bookmark, color: "text-gold" },
+    { label: "Want to Go", value: wantToGoCount, icon: Plus, color: "text-gold" },
     { label: "Cities Explored", value: 5, icon: Globe, color: "text-sage" },
   ];
 
@@ -192,7 +192,7 @@ export default function ProfilePage() {
       section: "My Lists",
       items: [
         { label: "Favourites", icon: Heart, href: "/map?list=favourites", badge: favouritesCount },
-        { label: "Want to Go", icon: Bookmark, href: "/map?list=want_to_go", badge: wantToGoCount },
+        { label: "Want to Go", icon: Plus, href: "/map?list=want_to_go", badge: wantToGoCount },
       ],
     },
     {
