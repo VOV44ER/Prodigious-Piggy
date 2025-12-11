@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CityCombobox } from "@/components/CityCombobox";
 import { Link } from "react-router-dom";
 import {
     ArrowLeft,
@@ -11,6 +12,7 @@ import {
     Image as ImageIcon,
     Loader2,
     Sparkles,
+    MapPin,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -26,10 +28,14 @@ export default function SettingsPage() {
     const [avatarLoading, setAvatarLoading] = useState(false);
     const [profile, setProfile] = useState<{
         full_name: string | null;
+        username: string | null;
         avatar_url: string | null;
+        location: string | null;
     } | null>(null);
 
-    const [fullName, setFullName] = useState("");
+    const [firstName, setFirstName] = useState("");
+    const [username, setUsername] = useState("");
+    const [hometown, setHometown] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
 
@@ -46,7 +52,7 @@ export default function SettingsPage() {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('full_name, avatar_url')
+                .select('full_name, username, avatar_url, location')
                 .eq('id', user.id)
                 .single();
 
@@ -56,12 +62,14 @@ export default function SettingsPage() {
 
             if (data) {
                 setProfile(data);
-                setFullName(data.full_name || "");
+                setFirstName(data.full_name || "");
+                setUsername(data.username || "");
+                setHometown(data.location || "");
                 if (data.avatar_url) {
                     setAvatarPreview(data.avatar_url);
                 }
             } else {
-                setFullName(user.user_metadata?.full_name || "");
+                setFirstName(user.user_metadata?.full_name || "");
             }
         } catch (error) {
             console.error('Error loading profile:', error);
@@ -84,7 +92,9 @@ export default function SettingsPage() {
                 .upsert({
                     id: user.id,
                     avatar_url: avatarUrl,
-                    full_name: profile?.full_name || fullName || null,
+                    full_name: profile?.full_name || firstName || null,
+                    username: profile?.username || username || null,
+                    location: profile?.location || hometown || null,
                 });
 
             if (updateError) {
@@ -123,27 +133,32 @@ export default function SettingsPage() {
                 .from('profiles')
                 .upsert({
                     id: user.id,
-                    full_name: fullName || null,
+                    full_name: firstName || null,
+                    username: username || null,
                     avatar_url: profile?.avatar_url || null,
+                    location: hometown || null,
                 });
 
             if (error) {
+                if (error.code === '23505') {
+                    throw new Error('Username already taken');
+                }
                 throw error;
             }
 
-            setProfile(prev => prev ? { ...prev, full_name: fullName } : { full_name: fullName, avatar_url: null });
+            setProfile(prev => prev ? { ...prev, full_name: firstName, username: username, location: hometown } : { full_name: firstName, username: username, avatar_url: null, location: hometown });
 
             window.dispatchEvent(new Event('profile_updated'));
 
             toast({
                 title: "Success",
-                description: "Name updated successfully",
+                description: "Profile updated successfully",
             });
         } catch (error: any) {
-            console.error('Error updating name:', error);
+            console.error('Error updating profile:', error);
             toast({
                 title: "Error",
-                description: error.message || "Failed to update name",
+                description: error.message || "Failed to update profile",
                 variant: "destructive",
             });
         } finally {
@@ -296,9 +311,9 @@ export default function SettingsPage() {
                                             <User className="h-5 w-5 text-charcoal-dark" />
                                         </div>
                                         <div>
-                                            <CardTitle>Full Name</CardTitle>
+                                            <CardTitle>Profile Information</CardTitle>
                                             <CardDescription>
-                                                Update your display name
+                                                Update your first name, username and home town
                                             </CardDescription>
                                         </div>
                                     </div>
@@ -306,12 +321,29 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <form onSubmit={ handleUpdateName } className="space-y-4">
                                         <div className="space-y-2">
-                                            <Label htmlFor="fullName">Full Name</Label>
+                                            <Label htmlFor="firstName">First Name</Label>
                                             <Input
-                                                id="fullName"
-                                                value={ fullName }
-                                                onChange={ (e) => setFullName(e.target.value) }
-                                                placeholder="Enter your full name"
+                                                id="firstName"
+                                                value={ firstName }
+                                                onChange={ (e) => setFirstName(e.target.value) }
+                                                placeholder="Enter your first name"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="username">Username</Label>
+                                            <Input
+                                                id="username"
+                                                value={ username }
+                                                onChange={ (e) => setUsername(e.target.value) }
+                                                placeholder="Choose a username"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="hometown">Home Town</Label>
+                                            <CityCombobox
+                                                value={ hometown }
+                                                onValueChange={ setHometown }
+                                                placeholder="Select your home town"
                                             />
                                         </div>
                                         <Button type="submit" disabled={ loading }>

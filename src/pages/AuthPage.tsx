@@ -5,11 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CityCombobox } from "@/components/CityCombobox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
 
 const emailSchema = z.string().email("Invalid email format");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -29,7 +31,9 @@ export default function AuthPage() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
-  const [fullName, setFullName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [username, setUsername] = useState("");
+  const [hometown, setHometown] = useState("");
 
   useEffect(() => {
     if (!loading && isAuthenticated) {
@@ -81,22 +85,66 @@ export default function AuthPage() {
       }
     }
 
+    if (!username || username.trim() === "") {
+      toast({ title: "Error", description: "Username is required", variant: "destructive" });
+      return;
+    }
+
     if (signupPassword !== signupConfirmPassword) {
       toast({ title: "Error", description: "Passwords don't match", variant: "destructive" });
       return;
     }
 
     setIsLoading(true);
-    const { error } = await signUp(signupEmail, signupPassword, { full_name: fullName });
-    setIsLoading(false);
+    const metadata: Record<string, string> = {};
+    if (firstName) metadata.full_name = firstName;
+    if (username) metadata.username = username;
+    if (hometown) metadata.location = hometown;
+
+    const { data, error } = await signUp(signupEmail, signupPassword, metadata);
 
     if (error) {
+      setIsLoading(false);
       let message = error.message;
       if (error.message.includes("already registered")) {
         message = "This email is already registered";
       }
       toast({ title: "Registration failed", description: message, variant: "destructive" });
+    } else if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          id: data.user.id,
+          full_name: firstName || null,
+          username: username || null,
+          location: hometown || null,
+        });
+
+      setIsLoading(false);
+
+      if (profileError) {
+        console.error('Error updating profile:', profileError);
+        if (profileError.code === '23505' || profileError.message?.includes('unique') || profileError.message?.includes('409')) {
+          toast({
+            title: "Registration failed",
+            description: "Username already taken",
+            variant: "destructive",
+          });
+          return;
+        }
+        toast({
+          title: "Warning",
+          description: "Account created but profile update failed. You can update it later in settings.",
+          variant: "default",
+        });
+      }
+
+      toast({
+        title: "Registration successful!",
+        description: "Please check your email to confirm your account",
+      });
     } else {
+      setIsLoading(false);
       toast({
         title: "Registration successful!",
         description: "Please check your email to confirm your account",
@@ -174,13 +222,32 @@ export default function AuthPage() {
             <TabsContent value="signup">
               <form onSubmit={ handleSignup } className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="signup-name">Name</Label>
+                  <Label htmlFor="signup-firstname">First Name</Label>
                   <Input
-                    id="signup-name"
+                    id="signup-firstname"
                     type="text"
-                    placeholder="Your name"
-                    value={ fullName }
-                    onChange={ (e) => setFullName(e.target.value) }
+                    placeholder="Your first name"
+                    value={ firstName }
+                    onChange={ (e) => setFirstName(e.target.value) }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-username">Username</Label>
+                  <Input
+                    id="signup-username"
+                    type="text"
+                    placeholder="Choose a username"
+                    value={ username }
+                    onChange={ (e) => setUsername(e.target.value) }
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-hometown">Home Town</Label>
+                  <CityCombobox
+                    value={ hometown }
+                    onValueChange={ setHometown }
+                    placeholder="Select your home town"
                   />
                 </div>
                 <div className="space-y-2">

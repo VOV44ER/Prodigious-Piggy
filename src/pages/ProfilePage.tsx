@@ -26,9 +26,9 @@ export default function ProfilePage() {
   const [favouritesCount, setFavouritesCount] = useState(0);
   const [wantToGoCount, setWantToGoCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [location, setLocation] = useState<string | null>(null);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
+  const [hometown, setHometown] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const loadReactions = useCallback(async () => {
@@ -69,68 +69,6 @@ export default function ProfilePage() {
     }
   }, [user]);
 
-  const getLocationName = useCallback(async (latitude: number, longitude: number) => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1&accept-language=en`,
-        {
-          headers: {
-            'User-Agent': 'Prodigious-Piggy/1.0',
-            'Accept-Language': 'en'
-          }
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch location');
-      }
-
-      const data = await response.json();
-      const city = data.address?.city || data.address?.town || data.address?.village || data.address?.municipality;
-      const country = data.address?.country;
-
-      if (city && country) {
-        return `${city}, ${country}`;
-      } else if (country) {
-        return country;
-      } else if (city) {
-        return city;
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Error fetching location name:', error);
-      return null;
-    }
-  }, []);
-
-  const getCurrentLocation = useCallback(async () => {
-    if (!navigator.geolocation) {
-      return;
-    }
-
-    setLocationLoading(true);
-
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        const locationName = await getLocationName(latitude, longitude);
-        if (locationName) {
-          setLocation(locationName);
-        }
-        setLocationLoading(false);
-      },
-      (error) => {
-        console.error('Error getting location:', error);
-        setLocationLoading(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000,
-      }
-    );
-  }, [getLocationName]);
 
   const loadUserProfile = useCallback(async () => {
     if (!user) return;
@@ -138,30 +76,35 @@ export default function ProfilePage() {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('full_name, avatar_url')
+        .select('full_name, username, avatar_url, location')
         .eq('id', user.id)
         .single();
 
       if (!error && data) {
         if (data.full_name) {
-          setUserName(data.full_name);
+          setFirstName(data.full_name);
+        }
+        if (data.username) {
+          setUsername(data.username);
         }
         if (data.avatar_url) {
           setAvatarUrl(data.avatar_url);
         }
+        if (data.location) {
+          setHometown(data.location);
+        }
       }
 
-      if (!userName && user.user_metadata?.full_name) {
-        setUserName(user.user_metadata.full_name);
+      if (!firstName && user.user_metadata?.full_name) {
+        setFirstName(user.user_metadata.full_name);
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
     }
-  }, [user, userName]);
+  }, [user, firstName]);
 
   useEffect(() => {
     loadReactions();
-    getCurrentLocation();
     loadUserProfile();
 
     const handleReactionsUpdate = () => {
@@ -179,7 +122,7 @@ export default function ProfilePage() {
       window.removeEventListener('place_reactions_updated', handleReactionsUpdate);
       window.removeEventListener('profile_updated', handleProfileUpdate);
     };
-  }, [loadReactions, getCurrentLocation, loadUserProfile]);
+  }, [loadReactions, loadUserProfile]);
 
   const stats = [
     { label: "Favourites", value: favouritesCount, icon: Heart, color: "text-coral" },
@@ -232,8 +175,13 @@ export default function ProfilePage() {
               {/* User Info */ }
               <div className="text-center md:text-left">
                 <h1 className="font-display text-3xl font-bold text-cream mb-1">
-                  { userName ? `Welcome Back, ${userName}!` : "Welcome Back!" }
+                  { firstName ? `Welcome Back, ${firstName}!` : "Welcome Back!" }
                 </h1>
+                { username && (
+                  <p className="text-cream/80 text-sm mb-1">
+                    @{ username }
+                  </p>
+                ) }
                 <p className="text-cream/60 flex items-center justify-center md:justify-start gap-2">
                   <Mail className="h-4 w-4" />
                   { user?.email || "Not signed in" }
@@ -242,15 +190,10 @@ export default function ProfilePage() {
                   <span className="px-3 py-1 bg-coral/20 text-coral-light text-sm font-medium rounded-full">
                     Pro Member
                   </span>
-                  { locationLoading ? (
+                  { hometown ? (
                     <span className="px-3 py-1 bg-cream/10 text-cream/60 text-sm rounded-full flex items-center gap-1">
                       <MapPin className="h-3 w-3" />
-                      Loading...
-                    </span>
-                  ) : location ? (
-                    <span className="px-3 py-1 bg-cream/10 text-cream/60 text-sm rounded-full flex items-center gap-1">
-                      <MapPin className="h-3 w-3" />
-                      { location }
+                      { hometown }
                     </span>
                   ) : null }
                 </div>
