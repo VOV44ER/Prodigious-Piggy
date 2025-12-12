@@ -2,6 +2,7 @@ export interface CSVPlace {
     id: string;
     name: string;
     address: string;
+    city: string | null;
     latitude: string | null;
     longitude: string | null;
     category: string | null;
@@ -17,6 +18,7 @@ export interface CSVPlace {
 export interface Place {
     name: string;
     address: string;
+    city?: string;
     category: string;
     cuisine?: string;
     price: 1 | 2 | 3 | 4;
@@ -46,22 +48,23 @@ export function parseCSVRow(row: string): CSVPlace | null {
     }
     values.push(current);
 
-    if (values.length < 2) return null;
+    if (values.length < 15) return null;
 
     return {
-        id: values[0]?.replace(/^"|"$/g, '') || '',
-        name: values[3]?.replace(/^"|"$/g, '') || '',
-        address: values[6]?.replace(/^"|"$/g, '') || '',
-        latitude: values[14]?.replace(/^"|"$/g, '') || null,
-        longitude: values[15]?.replace(/^"|"$/g, '') || null,
-        category: values[18]?.replace(/^"|"$/g, '') || null,
-        cuisine: values[20]?.replace(/^"|"$/g, '') || null,
-        price: values[43]?.replace(/^"|"$/g, '') || null,
-        rating: values[44]?.replace(/^"|"$/g, '') || null,
-        status: values[17]?.replace(/^"|"$/g, '') || null,
-        website: values[31]?.replace(/^"|"$/g, '') || null,
-        phone: values[32]?.replace(/^"|"$/g, '') || null,
-        opening_hours: values[33]?.replace(/^"|"$/g, '') || null,
+        id: values[0]?.replace(/^"|"$/g, '').trim() || '',
+        name: values[1]?.replace(/^"|"$/g, '').trim() || '',
+        address: values[4]?.replace(/^"|"$/g, '').trim() || '',
+        city: values[10]?.replace(/^"|"$/g, '').trim() || null,
+        latitude: values[13]?.replace(/^"|"$/g, '').trim() || null,
+        longitude: values[14]?.replace(/^"|"$/g, '').trim() || null,
+        category: values[16]?.replace(/^"|"$/g, '').trim() || null,
+        cuisine: values[18]?.replace(/^"|"$/g, '').trim() || null,
+        price: values[42]?.replace(/^"|"$/g, '').trim() || null,
+        rating: values[43]?.replace(/^"|"$/g, '').trim() || null,
+        status: values[16]?.replace(/^"|"$/g, '').trim() || null,
+        website: values[29]?.replace(/^"|"$/g, '').trim() || null,
+        phone: values[30]?.replace(/^"|"$/g, '').trim() || null,
+        opening_hours: values[31]?.replace(/^"|"$/g, '').trim() || null,
     };
 }
 
@@ -92,6 +95,7 @@ export function convertCSVToPlace(csvPlace: CSVPlace): Place | null {
     return {
         name: csvPlace.name,
         address: csvPlace.address,
+        city: csvPlace.city || undefined,
         category,
         cuisine,
         price,

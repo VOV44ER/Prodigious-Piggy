@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { Navbar } from "@/components/layout/Navbar";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { PlaceCard } from "@/components/place/PlaceCard";
@@ -9,10 +9,10 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
 import { getMapboxToken, getMapConfig, DEFAULT_ZOOM } from "@/integrations/mapbox/client";
-import { casablancaPlaces, type Place } from "@/data/casablanca-places";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserReactionsForPlaces, toggleReactionForPlace } from "@/hooks/useReactions";
 import { useCuisineReactions, type CuisineReactions } from "@/hooks/useCuisineReactions";
+import { usePlaces, type Place } from "@/hooks/usePlaces";
 import { supabase } from "@/integrations/supabase/client";
 
 type ViewMode = "map" | "cards";
@@ -41,15 +41,91 @@ function calculateDistance(
 
 type PlaceWithDistance = Place & { distance?: number };
 
+function extractCityFromAddress(address: string): string | null {
+  if (!address) return null;
+
+  const parts = address.split(',').map(p => p.trim());
+  if (parts.length < 2) return null;
+
+  // Для адресов типа "Street, City, State ZIP, Country" или "Street, City, Country"
+  // Пытаемся найти город - обычно это предпоследний элемент, но если предпоследний выглядит как ZIP/State, берем третий с конца
+  if (parts.length >= 3) {
+    const secondLast = parts[parts.length - 2];
+    // Если предпоследний элемент выглядит как ZIP код или штат (содержит цифры или короткий), берем третий с конца
+    if (/^\d+/.test(secondLast) || secondLast.length <= 5) {
+      if (parts.length >= 3) {
+        return parts[parts.length - 3];
+      }
+    } else {
+      return secondLast;
+    }
+  }
+
+  // Если только 2 части, город - это первая часть
+  if (parts.length === 2) {
+    return parts[0];
+  }
+
+  return null;
+}
+
+function normalizeCityName(cityName: string): string {
+  // Нормализуем названия городов для сравнения
+  return cityName
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, ' ')
+    // Заменяем альтернативные названия
+    .replace(/kiev/g, 'kyiv')
+    .replace(/moscow/g, 'moskva');
+}
+
+function matchesHomeCity(place: Place, homeCity: string | null): boolean {
+  if (!homeCity) return true;
+
+  const homeCityName = normalizeCityName(homeCity.split(',')[0].trim());
+
+  // Используем поле city из Place, если оно есть
+  if (place.city) {
+    const placeCityName = normalizeCityName(place.city);
+    // Точное совпадение
+    if (placeCityName === homeCityName) return true;
+    // Частичное совпадение (для случаев типа "New York" и "New York City")
+    if (placeCityName.includes(homeCityName) || homeCityName.includes(placeCityName)) {
+      // Проверяем, что это не случайное совпадение (минимум 3 символа)
+      if (homeCityName.length >= 3 && placeCityName.length >= 3) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Fallback: парсим адрес, если city не указан
+  const cityFromAddress = extractCityFromAddress(place.address);
+  if (!cityFromAddress) return false; // Если не можем определить город, исключаем место
+
+  const addressCityName = normalizeCityName(cityFromAddress);
+  if (addressCityName === homeCityName) return true;
+  if (addressCityName.includes(homeCityName) || homeCityName.includes(addressCityName)) {
+    if (homeCityName.length >= 3 && addressCityName.length >= 3) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function filterPlaces(
   places: Place[],
   filters: Record<string, string[]>,
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>,
   cuisineReactions: CuisineReactions,
   userLocation?: { latitude: number; longitude: number },
-  sortByNearest?: boolean
+  sortByNearest?: boolean,
+  homeCity?: string | null
 ): PlaceWithDistance[] {
+  // Места уже отфильтрованы по городу на уровне базы данных в usePlaces
   return places.filter((place) => {
+
     // Exclude places with disliked cuisines
     if (place.cuisine) {
       const cuisineReaction = cuisineReactions[place.cuisine];
@@ -157,6 +233,11 @@ export default function MapPage() {
   const [isNearestEnabled, setIsNearestEnabled] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
+  const [homeCity, setHomeCity] = useState<string | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+
+  // Загружаем места из Supabase с фильтрацией по городу
+  const { places: allPlaces, loading: isLoadingPlaces } = usePlaces(homeCity);
 
   useEffect(() => {
     const listParam = searchParams.get('list');
@@ -176,7 +257,7 @@ export default function MapPage() {
       const parsed = JSON.parse(reactions);
       const result: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> = {};
 
-      casablancaPlaces.forEach(place => {
+      allPlaces.forEach(place => {
         const placeReactions = parsed[place.name] || {};
         result[place.name] = {
           favourites: placeReactions.heart === true || placeReactions.love === true,
@@ -190,22 +271,64 @@ export default function MapPage() {
     } catch {
       // Ignore errors
     }
-  }, []);
+  }, [allPlaces]);
 
   const loadUserReactions = useCallback(async () => {
     if (!user) return;
 
     try {
-      const placeNames = casablancaPlaces.map(p => p.name);
+      const placeNames = allPlaces.map(p => p.name);
       const reactions = await getUserReactionsForPlaces(user.id, placeNames);
       setUserReactions(reactions);
     } catch (error) {
       console.error('Error loading user reactions:', error);
       loadLocalStorageReactions();
     }
-  }, [user, loadLocalStorageReactions]);
+  }, [user, allPlaces, loadLocalStorageReactions]);
+
+  const loadUserProfile = useCallback(async () => {
+    setIsLoadingProfile(true);
+    try {
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('location')
+          .eq('id', user.id)
+          .single();
+
+        if (!error && data?.location) {
+          setHomeCity(data.location);
+        } else {
+          setHomeCity(null);
+        }
+      } else {
+        const storedProfile = localStorage.getItem('user_profile');
+        if (storedProfile) {
+          try {
+            const profile = JSON.parse(storedProfile);
+            if (profile.location) {
+              setHomeCity(profile.location);
+            } else {
+              setHomeCity(null);
+            }
+          } catch {
+            setHomeCity(null);
+          }
+        } else {
+          setHomeCity(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setHomeCity(null);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [user]);
 
   useEffect(() => {
+    loadUserProfile();
+
     if (user) {
       loadUserReactions();
 
@@ -319,15 +442,19 @@ export default function MapPage() {
   }, [isNearestEnabled, userLocation, getCurrentLocation]);
 
   const filteredPlaces = useMemo(() => {
-    return filterPlaces(
-      casablancaPlaces,
+    // Места уже отфильтрованы по городу в usePlaces, применяем остальные фильтры
+    const result = filterPlaces(
+      allPlaces,
       filters,
       userReactions,
       cuisineReactions,
       userLocation || undefined,
-      isNearestEnabled
+      isNearestEnabled,
+      homeCity
     );
-  }, [filters, userReactions, cuisineReactions, userLocation, isNearestEnabled]);
+
+    return result;
+  }, [allPlaces, filters, userReactions, cuisineReactions, userLocation, isNearestEnabled, homeCity]);
 
   const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => {
     const currentReactions = userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
@@ -355,7 +482,7 @@ export default function MapPage() {
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">
                 { filteredPlaces.length } { filteredPlaces.length === 1 ? "place" : "places" }
-                { Object.keys(filters).length > 0 && ` (filtered from ${casablancaPlaces.length})` }
+                { Object.keys(filters).length > 0 && ` (filtered from ${allPlaces.length})` }
               </span>
             </div>
 
@@ -410,13 +537,20 @@ export default function MapPage() {
         {/* Content Area */ }
         <div className="flex-1 overflow-hidden">
           { viewMode === "map" ? (
-            <MapView places={ filteredPlaces } userLocation={ userLocation } />
+            <MapView
+              places={ filteredPlaces }
+              userLocation={ userLocation }
+              homeCity={ homeCity }
+              isLoadingProfile={ isLoadingProfile }
+            />
           ) : (
             <div className="h-full overflow-y-auto">
               <CardsView
                 places={ filteredPlaces }
                 userReactions={ userReactions }
                 onReactionToggle={ handleReactionToggle }
+                homeCity={ homeCity }
+                isLoadingProfile={ isLoadingProfile }
               />
             </div>
           ) }
@@ -429,16 +563,62 @@ export default function MapPage() {
 interface MapViewProps {
   places: Place[];
   userLocation?: { latitude: number; longitude: number } | null;
+  homeCity?: string | null;
+  isLoadingProfile?: boolean;
 }
 
-function MapView({ places, userLocation }: MapViewProps) {
+function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [cityCenter, setCityCenter] = useState<[number, number] | null>(null);
+
+  // Get city center from places or geocode
+  useEffect(() => {
+    if (!homeCity || places.length === 0) {
+      setCityCenter(null);
+      return;
+    }
+
+    // Try to get center from places first
+    const placesWithCoords = places.filter(p => p.latitude && p.longitude);
+    if (placesWithCoords.length > 0) {
+      // Calculate average center
+      const avgLat = placesWithCoords.reduce((sum, p) => sum + p.latitude, 0) / placesWithCoords.length;
+      const avgLng = placesWithCoords.reduce((sum, p) => sum + p.longitude, 0) / placesWithCoords.length;
+      setCityCenter([avgLng, avgLat]);
+      return;
+    }
+
+    // If no places with coords, try to geocode the city
+    const token = getMapboxToken();
+    if (!token) {
+      setCityCenter(null);
+      return;
+    }
+
+    const cityName = homeCity.split(',')[0].trim();
+    fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(cityName)}.json?access_token=${token}&limit=1`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.features && data.features.length > 0) {
+          const [lng, lat] = data.features[0].center;
+          setCityCenter([lng, lat]);
+        } else {
+          setCityCenter(null);
+        }
+      })
+      .catch(() => {
+        setCityCenter(null);
+      });
+  }, [homeCity, places]);
 
   useEffect(() => {
     if (!mapContainer.current) return;
+
+    // Если нет home city, не создаем карту (покажем пустое состояние)
+    if (!homeCity) return;
 
     const token = getMapboxToken();
     if (!token) {
@@ -449,24 +629,68 @@ function MapView({ places, userLocation }: MapViewProps) {
     mapboxgl.accessToken = token;
 
     const config = getMapConfig(token);
-    // Use user location if available, otherwise use Casablanca center
-    const initialCenter = userLocation
-      ? [userLocation.longitude, userLocation.latitude] as [number, number]
-      : CASABLANCA_CENTER;
+    // Priority: user location > city center > geocode city > Casablanca center
+    let initialCenter: [number, number] = CASABLANCA_CENTER;
+    let initialZoom = DEFAULT_ZOOM;
 
-    const initialZoom = userLocation ? 14 : DEFAULT_ZOOM;
+    if (userLocation) {
+      initialCenter = [userLocation.longitude, userLocation.latitude];
+      initialZoom = 14;
+    } else if (cityCenter) {
+      initialCenter = cityCenter;
+      initialZoom = 12;
+    } else if (homeCity) {
+      // Если cityCenter еще не загружен, попробуем геокодировать сразу
+      const cityName = homeCity.split(',')[0].trim();
+      fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(cityName)}.json?access_token=${token}&limit=1`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.features && data.features.length > 0) {
+            const [lng, lat] = data.features[0].center;
+            if (map.current) {
+              map.current.flyTo({
+                center: [lng, lat],
+                zoom: 12,
+                duration: 1000
+              });
+            }
+          }
+        })
+        .catch(() => { });
+    }
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: config.style || 'mapbox://styles/mapbox/streets-v12',
-      center: initialCenter,
-      zoom: initialZoom,
-    });
+    // Создаем карту только если еще не создана
+    if (!map.current) {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: config.style || 'mapbox://styles/mapbox/streets-v12',
+        center: initialCenter,
+        zoom: initialZoom,
+      });
 
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    }
 
-    map.current.on('load', () => {
+    // Обработчик загрузки карты для добавления маркеров и контролов
+    const handleMapLoad = () => {
       if (!map.current) return;
+
+      // Добавляем контролы навигации только один раз
+      try {
+        if (!map.current.getControl('navigation')) {
+          map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        }
+      } catch (error) {
+        // Игнорируем ошибки, если контрол уже добавлен или карта не готова
+      }
+
+      // Добавляем контролы навигации только один раз
+      try {
+        if (map.current && !map.current.getControl('navigation')) {
+          map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        }
+      } catch (error) {
+        // Игнорируем ошибки, если контрол уже добавлен или карта не готова
+      }
 
       markersRef.current.forEach(marker => marker.remove());
       markersRef.current = [];
@@ -530,8 +754,14 @@ function MapView({ places, userLocation }: MapViewProps) {
             center: [userLocation.longitude, userLocation.latitude],
             zoom: 14,
           });
+        } else if (cityCenter) {
+          // Если нет мест, но есть центр города, центрируем на него
+          map.current.flyTo({
+            center: cityCenter,
+            zoom: 12,
+          });
         } else {
-          // Если нет мест, центрируем на Касабланку
+          // Если нет мест и нет центра города, центрируем на Касабланку
           map.current.setCenter(CASABLANCA_CENTER);
           map.current.setZoom(DEFAULT_ZOOM);
         }
@@ -541,20 +771,67 @@ function MapView({ places, userLocation }: MapViewProps) {
           center: [userLocation.longitude, userLocation.latitude],
           zoom: 14,
         });
+      } else if (cityCenter) {
+        // If no places but city center available, center on city
+        map.current.flyTo({
+          center: cityCenter,
+          zoom: 12,
+        });
       } else {
-        // Если нет мест, центрируем на Касабланку
+        // Если нет мест и нет центра города, центрируем на Касабланку
         map.current.setCenter(CASABLANCA_CENTER);
         map.current.setZoom(DEFAULT_ZOOM);
       }
-    });
+    };
+
+    // Подписываемся на событие загрузки карты
+    if (map.current.loaded()) {
+      // Если карта уже загружена, сразу вызываем обработчик
+      handleMapLoad();
+    } else {
+      // Если карта еще не загружена, ждем события load
+      map.current.once('load', handleMapLoad);
+    }
 
     return () => {
       markersRef.current.forEach(marker => marker.remove());
       if (map.current) {
         map.current.remove();
+        map.current = null;
       }
     };
-  }, [places]);
+  }, [places, userLocation, homeCity, cityCenter]);
+
+  // Update map center when cityCenter changes or when places are filtered
+  useEffect(() => {
+    if (!map.current || !homeCity || userLocation) return;
+
+    // Если есть отфильтрованные места, используем их для центрирования
+    if (places.length > 0) {
+      const placesWithCoords = places.filter(p => p.latitude && p.longitude);
+      if (placesWithCoords.length > 0) {
+        const bounds = new mapboxgl.LngLatBounds();
+        placesWithCoords.forEach(place => {
+          bounds.extend([place.longitude, place.latitude]);
+        });
+        map.current.fitBounds(bounds, {
+          padding: { top: 50, bottom: 50, left: 50, right: 50 },
+          maxZoom: 14,
+          duration: 1000
+        });
+        return;
+      }
+    }
+
+    // Если нет мест, но есть cityCenter, центрируем на него
+    if (cityCenter) {
+      map.current.flyTo({
+        center: cityCenter,
+        zoom: 12,
+        duration: 1000
+      });
+    }
+  }, [cityCenter, places, homeCity, userLocation]);
 
   // Update map center when user location changes
   useEffect(() => {
@@ -585,6 +862,56 @@ function MapView({ places, userLocation }: MapViewProps) {
     );
   }
 
+  if (isLoadingProfile) {
+    return (
+      <div className="h-full min-h-[calc(100vh-200px)] flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!homeCity) {
+    return (
+      <div className="h-full min-h-[calc(100vh-200px)] flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Map className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h3 className="font-display text-xl font-semibold text-foreground mb-2">
+            No home city set
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Please set your home city in your profile settings to see places near you.
+          </p>
+          <Button asChild>
+            <Link to="/settings">Go to Settings</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (places.length === 0) {
+    return (
+      <div className="h-full min-h-[calc(100vh-200px)] flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Map className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h3 className="font-display text-xl font-semibold text-foreground mb-2">
+            No places found in { homeCity.split(',')[0] }
+          </h3>
+          <p className="text-muted-foreground">
+            We don't have any places in your home city yet. Try adjusting your filters or check back later.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full min-h-[calc(100vh-200px)] relative">
       <div ref={ mapContainer } className="absolute inset-0 w-full h-full" />
@@ -600,9 +927,43 @@ interface CardsViewProps {
   places: Place[];
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>;
   onReactionToggle: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => void;
+  homeCity?: string | null;
+  isLoadingProfile?: boolean;
 }
 
-function CardsView({ places, userReactions, onReactionToggle }: CardsViewProps) {
+function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadingProfile }: CardsViewProps) {
+  if (isLoadingProfile) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!homeCity) {
+    return (
+      <div className="container mx-auto px-4 py-12">
+        <div className="text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
+            <Map className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h3 className="font-display text-xl font-semibold text-foreground mb-2">
+            No home city set
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Please set your home city in your profile settings to see places near you.
+          </p>
+          <Button asChild>
+            <Link to="/settings">Go to Settings</Link>
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (places.length === 0) {
     return (
       <div className="container mx-auto px-4 py-12">
@@ -611,10 +972,10 @@ function CardsView({ places, userReactions, onReactionToggle }: CardsViewProps) 
             <Map className="h-10 w-10 text-muted-foreground" />
           </div>
           <h3 className="font-display text-xl font-semibold text-foreground mb-2">
-            No places found
+            No places found in { homeCity.split(',')[0] }
           </h3>
           <p className="text-muted-foreground">
-            Try adjusting your filters to see more results.
+            We don't have any places in your home city yet. Try adjusting your filters or check back later.
           </p>
         </div>
       </div>

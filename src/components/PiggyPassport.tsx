@@ -4,7 +4,6 @@ import { BookOpen, ThumbsUp, ThumbsDown, CheckCircle2, Circle } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { casablancaPlaces } from "@/data/casablanca-places";
 import { getUserReactionsForPlaces } from "@/hooks/useReactions";
 
 export type CuisineReaction = 'like' | 'dislike' | null;
@@ -80,7 +79,13 @@ export function PiggyPassport() {
                 if (reactions) {
                     const parsed = JSON.parse(reactions);
                     const experienced = new Set<string>();
-                    casablancaPlaces.forEach(place => {
+                    // Загружаем места из Supabase
+                    const { data: places } = await supabase
+                        .from('places')
+                        .select('name, cuisine')
+                        .limit(1000); // Ограничиваем для производительности
+
+                    (places || []).forEach(place => {
                         if (place.cuisine) {
                             const placeReactions = parsed[place.name] || {};
                             if (placeReactions.heart || placeReactions.love || placeReactions.been_there) {
@@ -99,11 +104,17 @@ export function PiggyPassport() {
         }
 
         try {
-            const placeNames = casablancaPlaces.map(p => p.name);
+            // Загружаем места из Supabase
+            const { data: places } = await supabase
+                .from('places')
+                .select('name, cuisine')
+                .limit(1000);
+
+            const placeNames = (places || []).map(p => p.name);
             const reactions = await getUserReactionsForPlaces(user.id, placeNames);
 
             const experienced = new Set<string>();
-            casablancaPlaces.forEach(place => {
+            (places || []).forEach(place => {
                 if (place.cuisine) {
                     const placeReactions = reactions[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
                     if (placeReactions.favourites) {

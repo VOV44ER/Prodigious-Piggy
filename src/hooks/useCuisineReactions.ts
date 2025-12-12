@@ -27,22 +27,40 @@ export function useCuisineReactions() {
         }
 
         try {
-            const { data, error } = await supabase
-                .from('cuisine_reactions')
-                .select('cuisine, reaction_type')
-                .eq('user_id', user.id);
+            // Загружаем реакции из user_reactions и извлекаем кухни из мест
+            const { data: userReactions } = await supabase
+                .from('user_reactions')
+                .select('place_id, reaction_type')
+                .eq('user_id', user.id)
+                .in('reaction_type', ['like', 'dislike']);
 
-            if (error) throw error;
+            if (userReactions && userReactions.length > 0) {
+                const placeIds = [...new Set(userReactions.map(r => r.place_id))];
+                const { data: places } = await supabase
+                    .from('places')
+                    .select('id, cuisine')
+                    .in('id', placeIds);
 
-            const reactions: CuisineReactions = {};
-            if (data) {
-                data.forEach((row: any) => {
-                    reactions[row.cuisine] = row.reaction_type;
+                const reactions: CuisineReactions = {};
+
+                // Группируем реакции по кухне
+                userReactions.forEach(reaction => {
+                    const place = places?.find(p => p.id === reaction.place_id);
+                    if (place && place.cuisine) {
+                        // Если уже есть реакция для этой кухни, приоритет у 'dislike'
+                        if (!reactions[place.cuisine] || reaction.reaction_type === 'dislike') {
+                            reactions[place.cuisine] = reaction.reaction_type as 'like' | 'dislike';
+                        }
+                    }
                 });
+
+                setCuisineReactions(reactions);
+            } else {
+                setCuisineReactions({});
             }
-            setCuisineReactions(reactions);
         } catch (error) {
             console.error('Error loading cuisine reactions:', error);
+            setCuisineReactions({});
         } finally {
             setLoading(false);
         }
@@ -58,14 +76,15 @@ export function useCuisineReactions() {
         window.addEventListener('cuisine_reactions_updated', handleUpdate);
 
         if (user) {
+            // Подписываемся на изменения в user_reactions вместо cuisine_reactions
             const channel = supabase
-                .channel('cuisine_reactions_changes')
+                .channel('user_reactions_changes')
                 .on(
                     'postgres_changes',
                     {
                         event: '*',
                         schema: 'public',
-                        table: 'cuisine_reactions',
+                        table: 'user_reactions',
                         filter: `user_id=eq.${user.id}`,
                     },
                     () => {

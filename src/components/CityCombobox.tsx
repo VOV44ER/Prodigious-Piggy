@@ -15,12 +15,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
-
-interface City {
-    name: string;
-    country: string;
-    displayName: string;
-}
+import { cities, type City } from "@/data/cities";
 
 interface CityComboboxProps {
     value?: string;
@@ -30,62 +25,6 @@ interface CityComboboxProps {
 
 export function CityCombobox({ value, onValueChange, placeholder = "Select city..." }: CityComboboxProps) {
     const [open, setOpen] = React.useState(false);
-    const [cities, setCities] = React.useState<City[]>([]);
-    const [loading, setLoading] = React.useState(false);
-
-    React.useEffect(() => {
-        const fetchCities = async () => {
-            setLoading(true);
-            try {
-                const response = await fetch('https://countriesnow.space/api/v0.1/countries/population/cities');
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.data && Array.isArray(data.data)) {
-                        const cityList: City[] = data.data.map((item: any) => ({
-                            name: item.city,
-                            country: item.country,
-                            displayName: `${item.city}, ${item.country}`,
-                        }));
-                        const uniqueCities = cityList.filter((city, index, self) =>
-                            index === self.findIndex((c) => c.displayName === city.displayName)
-                        );
-                        setCities(uniqueCities.sort((a, b) => a.displayName.localeCompare(b.displayName)));
-                    } else {
-                        throw new Error('Invalid response format');
-                    }
-                } else {
-                    throw new Error('Failed to fetch cities');
-                }
-            } catch (error) {
-                console.error('Error fetching cities:', error);
-                const fallbackCities: City[] = [
-                    { name: "New York", country: "USA", displayName: "New York, USA" },
-                    { name: "Los Angeles", country: "USA", displayName: "Los Angeles, USA" },
-                    { name: "Chicago", country: "USA", displayName: "Chicago, USA" },
-                    { name: "London", country: "UK", displayName: "London, UK" },
-                    { name: "Manchester", country: "UK", displayName: "Manchester, UK" },
-                    { name: "Paris", country: "France", displayName: "Paris, France" },
-                    { name: "Lyon", country: "France", displayName: "Lyon, France" },
-                    { name: "Tokyo", country: "Japan", displayName: "Tokyo, Japan" },
-                    { name: "Osaka", country: "Japan", displayName: "Osaka, Japan" },
-                    { name: "Berlin", country: "Germany", displayName: "Berlin, Germany" },
-                    { name: "Munich", country: "Germany", displayName: "Munich, Germany" },
-                    { name: "Madrid", country: "Spain", displayName: "Madrid, Spain" },
-                    { name: "Barcelona", country: "Spain", displayName: "Barcelona, Spain" },
-                    { name: "Rome", country: "Italy", displayName: "Rome, Italy" },
-                    { name: "Milan", country: "Italy", displayName: "Milan, Italy" },
-                    { name: "Amsterdam", country: "Netherlands", displayName: "Amsterdam, Netherlands" },
-                    { name: "Casablanca", country: "Morocco", displayName: "Casablanca, Morocco" },
-                    { name: "Rabat", country: "Morocco", displayName: "Rabat, Morocco" },
-                ];
-                setCities(fallbackCities);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchCities();
-    }, []);
 
     return (
         <Popover open={ open } onOpenChange={ setOpen }>
@@ -107,7 +46,7 @@ export function CityCombobox({ value, onValueChange, placeholder = "Select city.
                     <CommandInput placeholder="Search city..." />
                     <CommandList>
                         <CommandEmpty>
-                            { loading ? "Loading cities..." : "No city found." }
+                            No city found.
                         </CommandEmpty>
                         <CommandGroup>
                             { cities.map((city) => (

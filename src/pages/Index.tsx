@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/layout/Navbar";
@@ -7,7 +7,7 @@ import { PlaceCard } from "@/components/place/PlaceCard";
 import { motion } from "framer-motion";
 import { MessageCircle, Map, Heart, Sparkles, Globe, Shield, ChevronRight } from "lucide-react";
 import heroDiner from "@/assets/hero-diner.jpg";
-import { casablancaPlaces } from "@/data/casablanca-places";
+import { supabase } from "@/integrations/supabase/client";
 import { WorldCoverageHeatmap } from "@/components/WorldCoverageHeatmap";
 import {
   Dialog,
@@ -50,10 +50,41 @@ const features = [
   },
 ];
 
-const samplePlaces = casablancaPlaces.slice(0, 3);
-
 export default function Index() {
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
+  const [samplePlaces, setSamplePlaces] = useState<any[]>([]);
+
+  // Загружаем примеры мест из Supabase
+  useEffect(() => {
+    const loadSamplePlaces = async () => {
+      const { data } = await supabase
+        .from('places')
+        .select('*')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null)
+        .limit(3);
+
+      if (data) {
+        // Преобразуем в формат Place для PlaceCard
+        const converted = data.map(p => ({
+          id: p.id,
+          name: p.name,
+          address: p.address || '',
+          city: p.city,
+          category: p.category || 'Restaurant',
+          cuisine: p.cuisine || p.cuisine_type?.[0],
+          price: (p.price_level as 1 | 2 | 3 | 4) || 2,
+          rating: p.rating || 4.0,
+          sentiment: p.sentiment_score ? Math.round(p.sentiment_score * 100) : 70,
+          imageUrl: `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop&sig=${p.id}`,
+          latitude: p.latitude || 0,
+          longitude: p.longitude || 0,
+        }));
+        setSamplePlaces(converted);
+      }
+    };
+    loadSamplePlaces();
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">

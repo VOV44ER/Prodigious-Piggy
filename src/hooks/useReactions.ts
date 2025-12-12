@@ -176,17 +176,17 @@ export const useReactions = (placeName: string, skip: boolean = false) => {
 
 async function getOrCreatePlaceId(placeName: string): Promise<string | null> {
     try {
-        // Generate slug from name
-        const slug = placeName
+        // Generate base slug from name
+        const baseSlug = placeName
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/(^-|-$)/g, '');
 
-        // Try to find existing place by slug
+        // Try to find existing place by name (not slug, since slug might have duplicates)
         let { data: existingPlace, error: findError } = await supabase
             .from('places')
-            .select('id')
-            .eq('slug', slug)
+            .select('id, slug')
+            .eq('name', placeName)
             .maybeSingle();
 
         if (existingPlace && !findError) {
@@ -200,7 +200,43 @@ async function getOrCreatePlaceId(placeName: string): Promise<string | null> {
             return null;
         }
 
-        // Try to create a new place
+        // Generate unique slug by adding a hash suffix if needed
+        let slug = baseSlug;
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        while (attempts < maxAttempts) {
+            // Check if slug exists
+            const { data: existingBySlug } = await supabase
+                .from('places')
+                .select('id')
+                .eq('slug', slug)
+                .maybeSingle();
+
+            if (!existingBySlug) {
+                // Slug is available, break and use it
+                break;
+            }
+
+            // Slug exists, try to find by name instead
+            const { data: existingByName } = await supabase
+                .from('places')
+                .select('id')
+                .eq('name', placeName)
+                .maybeSingle();
+
+            if (existingByName) {
+                // Place with same name exists, return its ID
+                return existingByName.id;
+            }
+
+            // Generate unique slug with hash suffix
+            const hash = Math.random().toString(36).substring(2, 8);
+            slug = `${baseSlug}-${hash}`;
+            attempts++;
+        }
+
+        // Try to insert place
         const { data: newPlace, error: createError } = await supabase
             .from('places')
             .insert({
@@ -211,11 +247,24 @@ async function getOrCreatePlaceId(placeName: string): Promise<string | null> {
             .single();
 
         if (createError) {
-            // If creation fails (e.g., due to RLS), try to find again (might have been created by another user)
+            // If creation fails due to duplicate slug, try to find by name
+            if (createError.code === '23505') {
+                const { data: retryPlace } = await supabase
+                    .from('places')
+                    .select('id')
+                    .eq('name', placeName)
+                    .maybeSingle();
+
+                if (retryPlace) {
+                    return retryPlace.id;
+                }
+            }
+
+            // If creation fails for other reasons, try to find by name as fallback
             const { data: retryPlace } = await supabase
                 .from('places')
                 .select('id')
-                .eq('slug', slug)
+                .eq('name', placeName)
                 .maybeSingle();
 
             if (retryPlace) {
@@ -270,99 +319,66 @@ export async function getUserReactionsForPlaces(
     placeNames: string[]
 ): Promise<Record<string, PlaceReactions>> {
     try {
-        // Get place IDs for all place names
-        const slugs = placeNames.map(name =>
-            name
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/(^-|-$)/g, '')
-        );
+        // ВАЖНО: Места хранятся в Supabase в таблице places
+        // Загружаем только те места, где пользователь ставил реакции
 
-        const { data: places } = await supabase
-            .from('places')
-            .select('id, slug, name')
-            .in('slug', slugs);
+        // Получаем только те места, которые уже есть в Supabase (где пользователь ставил реакции)
+        // Используем пагинацию, чтобы не перегружать запрос
+        const BATCH_SIZE = 500; // Обрабатываем по 500 мест за раз
+        const allPlaces: Array<{ id: string; slug: string; name: string }> = [];
 
-        // Create missing places in batch if needed
-        const existingSlugs = new Set(places?.map(p => p.slug) || []);
-        const missingPlaces = placeNames
-            .map(name => {
-                const slug = name
-                    .toLowerCase()
-                    .replace(/[^a-z0-9]+/g, '-')
-                    .replace(/(^-|-$)/g, '');
-                return { name, slug };
-            })
-            .filter(({ slug }) => !existingSlugs.has(slug));
-
-        if (missingPlaces.length > 0) {
-            // Try to create missing places in batch
-            // Note: This might fail due to RLS, but we'll continue anyway
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    await supabase
-                        .from('places')
-                        .insert(missingPlaces.map(({ name, slug }) => ({ name, slug })))
-                        .select('id, slug, name');
-                }
-            } catch (error) {
-                // Ignore errors - places might be created by other users or RLS might block
-                console.log('Could not create missing places in batch:', error);
-            }
-
-            // Re-fetch places after potential creation
-            const { data: updatedPlaces } = await supabase
+        // Разбиваем на батчи для избежания слишком больших запросов
+        for (let i = 0; i < placeNames.length; i += BATCH_SIZE) {
+            const batch = placeNames.slice(i, i + BATCH_SIZE);
+            const { data: places } = await supabase
                 .from('places')
                 .select('id, slug, name')
-                .in('slug', slugs);
+                .in('name', batch);
 
-            if (updatedPlaces) {
-                places?.push(...updatedPlaces.filter(p => !existingSlugs.has(p.slug)));
+            if (places) {
+                allPlaces.push(...places);
             }
         }
 
-        if (!places || places.length === 0) {
-            // Return empty reactions for all places
-            const result: Record<string, PlaceReactions> = {};
-            placeNames.forEach(name => {
-                result[name] = { favourites: false, wantToGo: false, like: false, dislike: false };
-            });
-            return result;
-        }
-
-        const placeIds = places.map(p => p.id);
-
-        // Get all reactions for these places
-        const { data: reactions } = await supabase
-            .from('user_reactions')
-            .select('place_id, reaction_type')
-            .eq('user_id', userId)
-            .in('place_id', placeIds);
-
-        // Build result map
+        // Создаем результат со всеми местами (по умолчанию без реакций)
         const result: Record<string, PlaceReactions> = {};
-
-        placeNames.forEach(placeName => {
-            const slug = placeName
-                .toLowerCase()
-                .replace(/[^a-z0-9]+/g, '-')
-                .replace(/(^-|-$)/g, '');
-
-            const place = places.find(p => p.slug === slug);
-            if (!place) {
-                result[placeName] = { favourites: false, wantToGo: false, like: false, dislike: false };
-                return;
-            }
-
-            const placeReactions = reactions?.filter(r => r.place_id === place.id) || [];
-            result[placeName] = {
-                favourites: placeReactions.some(r => r.reaction_type === 'love'),
-                wantToGo: placeReactions.some(r => r.reaction_type === 'want_to_go'),
-                like: placeReactions.some(r => r.reaction_type === 'like'),
-                dislike: placeReactions.some(r => r.reaction_type === 'dislike'),
-            };
+        placeNames.forEach(name => {
+            result[name] = { favourites: false, wantToGo: false, like: false, dislike: false };
         });
+
+        // Если есть места в Supabase, загружаем реакции для них
+        if (allPlaces && allPlaces.length > 0) {
+            const placeIds = allPlaces.map(p => p.id);
+            const placeNameToId = new Map(allPlaces.map(p => [p.name, p.id]));
+
+            // Get all reactions for these places
+            const { data: reactions } = await supabase
+                .from('user_reactions')
+                .select('place_id, reaction_type')
+                .eq('user_id', userId)
+                .in('place_id', placeIds);
+
+            // Обновляем реакции для мест, которые есть в Supabase
+            if (reactions) {
+                reactions.forEach(reaction => {
+                    // Находим имя места по ID
+                    const placeName = Array.from(placeNameToId.entries())
+                        .find(([_, id]) => id === reaction.place_id)?.[0];
+
+                    if (placeName && result[placeName]) {
+                        if (reaction.reaction_type === 'love') {
+                            result[placeName].favourites = true;
+                        } else if (reaction.reaction_type === 'want_to_go') {
+                            result[placeName].wantToGo = true;
+                        } else if (reaction.reaction_type === 'like') {
+                            result[placeName].like = true;
+                        } else if (reaction.reaction_type === 'dislike') {
+                            result[placeName].dislike = true;
+                        }
+                    }
+                });
+            }
+        }
 
         return result;
     } catch (error) {

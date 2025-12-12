@@ -18,7 +18,6 @@ import { cn } from "@/lib/utils";
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserReactionsForPlaces } from "@/hooks/useReactions";
-import { casablancaPlaces } from "@/data/casablanca-places";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function ProfilePage() {
@@ -34,15 +33,30 @@ export default function ProfilePage() {
   const loadReactions = useCallback(async () => {
     try {
       if (user) {
-        const placeNames = casablancaPlaces.map(p => p.name);
-        const reactions = await getUserReactionsForPlaces(user.id, placeNames);
+        // Загружаем все места пользователя из реакций
+        const { data: userReactions } = await supabase
+          .from('user_reactions')
+          .select('place_id, reaction_type')
+          .eq('user_id', user.id);
 
-        const favourites = Object.values(reactions).filter(r => r.favourites).length;
-        const wantToGo = Object.values(reactions).filter(r => r.wantToGo).length;
+        if (userReactions) {
+          const placeIds = [...new Set(userReactions.map(r => r.place_id))];
+          const { data: places } = await supabase
+            .from('places')
+            .select('name')
+            .in('id', placeIds);
 
-        setFavouritesCount(favourites);
-        setWantToGoCount(wantToGo);
+          const placeNames = places?.map(p => p.name) || [];
+          const reactions = await getUserReactionsForPlaces(user.id, placeNames);
+
+          const favourites = Object.values(reactions).filter(r => r.favourites).length;
+          const wantToGo = Object.values(reactions).filter(r => r.wantToGo).length;
+
+          setFavouritesCount(favourites);
+          setWantToGoCount(wantToGo);
+        }
       } else {
+        // Для гостевых пользователей используем localStorage
         const reactions = localStorage.getItem('place_reactions');
         if (reactions) {
           const parsed = JSON.parse(reactions);
