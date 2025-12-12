@@ -56,8 +56,8 @@ function convertPlaceRowToPlace(row: PlaceRow): Place {
     // Преобразуем sentiment_score в процент
     const sentiment = row.sentiment_score ? Math.round(row.sentiment_score * 100) : 70;
 
-    // Генерируем imageUrl
-    const imageUrl = `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop&sig=${row.id}`;
+    // Use imageUrl from database if available, otherwise will be generated in PlaceCard
+    const imageUrl = row.photos && row.photos.length > 0 ? row.photos[0] : undefined;
 
     return {
         id: row.id,

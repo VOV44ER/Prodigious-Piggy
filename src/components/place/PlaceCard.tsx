@@ -2,6 +2,7 @@ import { Heart, Plus, ThumbsUp, ThumbsDown, MapPin, DollarSign, Star } from "luc
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useReactions } from "@/hooks/useReactions";
+import { getPlaceImageUrl } from "@/lib/place-images";
 
 interface PlaceCardProps {
   name: string;
@@ -82,6 +83,8 @@ export function PlaceCard({
     ? cuisine.split(';').map(c => c.trim()).filter(c => c.length > 0)
     : [];
 
+  const displayImageUrl = imageUrl || getPlaceImageUrl(category, name, address);
+
   return (
     <motion.div
       initial={ { opacity: 0, y: 20 } }
@@ -94,9 +97,9 @@ export function PlaceCard({
     >
       {/* Image */ }
       <div className="relative h-40 bg-muted overflow-hidden">
-        { imageUrl ? (
+        { displayImageUrl ? (
           <img
-            src={ imageUrl }
+            src={ displayImageUrl }
             alt={ name }
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
