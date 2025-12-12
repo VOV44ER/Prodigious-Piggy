@@ -33,52 +33,26 @@ export default function ProfilePage() {
   const loadReactions = useCallback(async () => {
     try {
       if (user) {
-        // Загружаем все места пользователя из реакций
         const { data: userReactions } = await supabase
           .from('user_reactions')
-          .select('place_id, reaction_type')
+          .select('reaction_type')
           .eq('user_id', user.id);
 
         if (userReactions) {
-          const placeIds = [...new Set(userReactions.map(r => r.place_id))];
-          const { data: places } = await supabase
-            .from('places')
-            .select('id, name')
-            .in('id', placeIds);
-
-          const placeNames = places?.map(p => p.name) || [];
-          const placeIdsArray = places?.map(p => p.id) || [];
-          const reactions = await getUserReactionsForPlaces(user.id, placeNames, placeIdsArray);
-
-          const favourites = Object.values(reactions.byId).filter(r => r.favourites).length;
-          const wantToGo = Object.values(reactions.byId).filter(r => r.wantToGo).length;
+          const favourites = userReactions.filter(r => r.reaction_type === 'love').length;
+          const wantToGo = userReactions.filter(r => r.reaction_type === 'want_to_go').length;
 
           setFavouritesCount(favourites);
           setWantToGoCount(wantToGo);
-        }
-      } else {
-        // Для гостевых пользователей используем localStorage
-        const reactions = localStorage.getItem('place_reactions');
-        if (reactions) {
-          const parsed = JSON.parse(reactions);
-          let favourites = 0;
-          let wantToGo = 0;
-
-          Object.values(parsed).forEach((placeReactions: any) => {
-            if (placeReactions.heart || placeReactions.love) {
-              favourites++;
-            }
-            if (placeReactions.bookmark || placeReactions.want_to_go) {
-              wantToGo++;
-            }
-          });
-
-          setFavouritesCount(favourites);
-          setWantToGoCount(wantToGo);
+        } else {
+          setFavouritesCount(0);
+          setWantToGoCount(0);
         }
       }
     } catch (error) {
       console.error('Error loading reactions:', error);
+      setFavouritesCount(0);
+      setWantToGoCount(0);
     } finally {
       setLoading(false);
     }

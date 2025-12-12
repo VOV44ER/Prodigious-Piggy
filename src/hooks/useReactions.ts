@@ -80,29 +80,7 @@ export const useReactions = (placeName: string, placeId?: string, skip: boolean 
         }
 
         if (!user) {
-            // Fallback to localStorage if not authenticated
-            try {
-                const reactions = localStorage.getItem('place_reactions');
-                if (reactions) {
-                    const parsed = JSON.parse(reactions);
-                    const placeReactions = parsed[placeName] || {};
-                    if (placeReactions.heart || placeReactions.love) {
-                        setReaction('love');
-                    } else if (placeReactions.bookmark || placeReactions.want_to_go) {
-                        setReaction('want_to_go');
-                    } else if (placeReactions.like) {
-                        setReaction('like');
-                    } else if (placeReactions.dislike) {
-                        setReaction('dislike');
-                    } else {
-                        setReaction(null);
-                    }
-                } else {
-                    setReaction(null);
-                }
-            } catch {
-                // Ignore errors
-            }
+            setReaction(null);
             setLoading(false);
             return;
         }
@@ -112,25 +90,12 @@ export const useReactions = (placeName: string, placeId?: string, skip: boolean 
 
     const toggleReaction = async (type: ReactionType) => {
         if (!user) {
-            // Fallback to localStorage if not authenticated
-            const newReaction = reaction === type ? null : type;
-            setReaction(newReaction);
-            saveToLocalStorage(placeName, newReaction);
-            // Dispatch custom event to notify other components
-            window.dispatchEvent(new Event('place_reactions_updated'));
             return;
         }
 
         try {
-            // ВАЖНО: Используем только placeId, если он передан
-            // Если placeId не передан, используем localStorage fallback
-            // Это предотвращает проблемы с дубликатами имен
             if (!placeId) {
-                console.warn(`PlaceCard: placeId not provided for "${placeName}". Using localStorage fallback.`);
-                const newReaction = reaction === type ? null : type;
-                setReaction(newReaction);
-                saveToLocalStorage(placeName, newReaction);
-                window.dispatchEvent(new Event('place_reactions_updated'));
+                console.warn(`PlaceCard: placeId not provided for "${placeName}". Cannot toggle reaction.`);
                 return;
             }
 
@@ -215,37 +180,6 @@ async function getPlaceIdByName(placeName: string): Promise<string | null> {
     }
 }
 
-function saveToLocalStorage(placeName: string, reaction: ReactionType) {
-    try {
-        const reactions = localStorage.getItem('place_reactions') || '{}';
-        const parsed = JSON.parse(reactions);
-
-        if (!parsed[placeName]) {
-            parsed[placeName] = {};
-        }
-
-        delete parsed[placeName].heart;
-        delete parsed[placeName].love;
-        delete parsed[placeName].bookmark;
-        delete parsed[placeName].want_to_go;
-        delete parsed[placeName].like;
-        delete parsed[placeName].dislike;
-
-        if (reaction === 'love') {
-            parsed[placeName].love = true;
-        } else if (reaction === 'want_to_go') {
-            parsed[placeName].want_to_go = true;
-        } else if (reaction === 'like') {
-            parsed[placeName].like = true;
-        } else if (reaction === 'dislike') {
-            parsed[placeName].dislike = true;
-        }
-
-        localStorage.setItem('place_reactions', JSON.stringify(parsed));
-    } catch {
-        // Ignore errors
-    }
-}
 
 export async function getUserReactionsForPlaces(
     userId: string,
@@ -253,30 +187,12 @@ export async function getUserReactionsForPlaces(
     placeIds?: string[]
 ): Promise<{ byName: Record<string, PlaceReactions>; byId: Record<string, PlaceReactions> }> {
     try {
-        // Создаем результат со всеми местами (по умолчанию без реакций)
         const resultByName: Record<string, PlaceReactions> = {};
         const resultById: Record<string, PlaceReactions> = {};
 
-        // Сначала создаем маппинг по ID (всегда уникально)
-        if (placeIds && placeIds.length === placeNames.length) {
-            placeIds.forEach((id, index) => {
-                if (id) {
-                    resultById[id] = { favourites: false, wantToGo: false, like: false, dislike: false };
-                }
-            });
-        }
-
-        // Затем создаем маппинг по имени только для уникальных имен
         const nameCounts = new Map<string, number>();
         placeNames.forEach(name => {
             nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-        });
-
-        placeNames.forEach((name, index) => {
-            // Добавляем в resultByName только если имя уникальное
-            if (nameCounts.get(name) === 1) {
-                resultByName[name] = { favourites: false, wantToGo: false, like: false, dislike: false };
-            }
         });
 
         // ВАЖНО: Если передан массив placeIds, используем его напрямую
@@ -310,7 +226,7 @@ export async function getUserReactionsForPlaces(
                         };
 
                         // Обновляем по ID (приоритет)
-                        if (reaction.place_id && resultById[reaction.place_id]) {
+                        if (reaction.place_id) {
                             resultById[reaction.place_id] = reactionData;
                         }
 
@@ -318,7 +234,7 @@ export async function getUserReactionsForPlaces(
                         if (placeName) {
                             // Проверяем, что это единственное место с таким именем
                             const placesWithSameName = placeIds?.filter((id, idx) => placeNames[idx] === placeName) || [];
-                            if (placesWithSameName.length === 1 && resultByName[placeName]) {
+                            if (placesWithSameName.length === 1) {
                                 resultByName[placeName] = reactionData;
                             }
                         }
@@ -356,45 +272,13 @@ export async function toggleReactionForPlace(
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-        // Fallback to localStorage if not authenticated
-        const supabaseType = type === 'heart' ? 'love' : type === 'bookmark' ? 'want_to_go' : type;
-        const newReaction = (type === 'heart' && currentReactions.favourites) ||
-            (type === 'bookmark' && currentReactions.wantToGo) ||
-            (type === 'like' && currentReactions.like) ||
-            (type === 'dislike' && currentReactions.dislike) ? null : supabaseType;
-
-        saveToLocalStorage(placeName, newReaction);
-        window.dispatchEvent(new Event('place_reactions_updated'));
-
-        return {
-            favourites: newReaction === 'love',
-            wantToGo: newReaction === 'want_to_go',
-            like: newReaction === 'like',
-            dislike: newReaction === 'dislike',
-        };
+        return currentReactions;
     }
 
     try {
-        // ВАЖНО: Используем только placeId, если он передан
-        // Если placeId не передан, используем localStorage fallback
-        // Это предотвращает проблемы с дубликатами имен
         if (!placeId) {
-            // Place not found, use localStorage fallback
-            const supabaseType = type === 'heart' ? 'love' : type === 'bookmark' ? 'want_to_go' : type;
-            const newReaction = (type === 'heart' && currentReactions.favourites) ||
-                (type === 'bookmark' && currentReactions.wantToGo) ||
-                (type === 'like' && currentReactions.like) ||
-                (type === 'dislike' && currentReactions.dislike) ? null : supabaseType;
-
-            saveToLocalStorage(placeName, newReaction);
-            window.dispatchEvent(new Event('place_reactions_updated'));
-
-            return {
-                favourites: newReaction === 'love',
-                wantToGo: newReaction === 'want_to_go',
-                like: newReaction === 'like',
-                dislike: newReaction === 'dislike',
-            };
+            console.warn(`toggleReactionForPlace: placeId not provided for "${placeName}". Cannot toggle reaction.`);
+            return currentReactions;
         }
 
         // Map UI reaction types to Supabase reaction types

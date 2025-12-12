@@ -171,17 +171,28 @@ function filterPlaces(
 
     // List filter (favourites, want_to_go) - используем ID для точности
     if (filters.list && filters.list.length > 0) {
-      const reactions = userReactionsById[place.id] || userReactions[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
-      const matches = filters.list.some((listType) => {
-        if (listType === 'favourites') {
-          return reactions.favourites;
-        }
-        if (listType === 'want_to_go') {
-          return reactions.wantToGo;
-        }
+      const reactions = userReactionsById[place.id] || userReactions[place.name];
+
+      if (!reactions) {
         return false;
-      });
-      if (!matches) {
+      }
+
+      const hasFavourites = reactions.favourites === true;
+      const hasWantToGo = reactions.wantToGo === true;
+
+      let hasMatch = false;
+      for (const listType of filters.list) {
+        if (listType === 'favourites' && hasFavourites) {
+          hasMatch = true;
+          break;
+        }
+        if (listType === 'want_to_go' && hasWantToGo) {
+          hasMatch = true;
+          break;
+        }
+      }
+
+      if (!hasMatch) {
         return false;
       }
     }
@@ -205,9 +216,15 @@ function filterPlaces(
 
 export default function MapPage() {
   const { user } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [filters, setFilters] = useState<Record<string, string[]>>(() => {
+    const initialListParam = new URLSearchParams(window.location.search).get('list');
+    if (initialListParam && (initialListParam === 'favourites' || initialListParam === 'want_to_go')) {
+      return { list: [initialListParam] };
+    }
+    return {};
+  });
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const [userReactionsById, setUserReactionsById] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const { cuisineReactions } = useCuisineReactions();
@@ -226,43 +243,36 @@ export default function MapPage() {
     }
   }, [homeCity, currentCity]);
 
+  const isUpdatingFromFilterBar = useRef(false);
+
   useEffect(() => {
+    if (isUpdatingFromFilterBar.current) {
+      isUpdatingFromFilterBar.current = false;
+      return;
+    }
+
     const listParam = searchParams.get('list');
     if (listParam && (listParam === 'favourites' || listParam === 'want_to_go')) {
-      setFilters(prev => ({
-        ...prev,
-        list: [listParam],
-      }));
+      setFilters(prev => {
+        if (prev.list && prev.list.length === 1 && prev.list[0] === listParam) {
+          return prev;
+        }
+        return {
+          ...prev,
+          list: [listParam],
+        };
+      });
+    } else {
+      setFilters(prev => {
+        if (!prev.list) {
+          return prev;
+        }
+        const newFilters = { ...prev };
+        delete newFilters.list;
+        return newFilters;
+      });
     }
   }, [searchParams]);
-
-  const loadLocalStorageReactions = useCallback(() => {
-    try {
-      const reactions = localStorage.getItem('place_reactions');
-      if (!reactions) return;
-
-      const parsed = JSON.parse(reactions);
-      const result: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> = {};
-      const resultById: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> = {};
-
-      allPlaces.forEach(place => {
-        const placeReactions = parsed[place.name] || {};
-        const reactionData = {
-          favourites: placeReactions.heart === true || placeReactions.love === true,
-          wantToGo: placeReactions.bookmark === true || placeReactions.want_to_go === true,
-          like: placeReactions.like === true,
-          dislike: placeReactions.dislike === true,
-        };
-        result[place.name] = reactionData;
-        resultById[place.id] = reactionData;
-      });
-
-      setUserReactions(result);
-      setUserReactionsById(resultById);
-    } catch {
-      // Ignore errors
-    }
-  }, [allPlaces]);
 
   const loadUserReactions = useCallback(async () => {
     if (!user) return;
@@ -272,14 +282,12 @@ export default function MapPage() {
       const placeIds = allPlaces.map(p => p.id);
       const reactions = await getUserReactionsForPlaces(user.id, placeNames, placeIds);
 
-      // Используем реакции по ID (приоритет) и по имени (fallback)
       setUserReactions(reactions.byName);
       setUserReactionsById(reactions.byId);
     } catch (error) {
       console.error('Error loading user reactions:', error);
-      loadLocalStorageReactions();
     }
-  }, [user, allPlaces, loadLocalStorageReactions]);
+  }, [user, allPlaces]);
 
   const loadUserProfile = useCallback(async () => {
     setIsLoadingProfile(true);
@@ -353,47 +361,46 @@ export default function MapPage() {
         clearTimeout(timeoutId);
         supabase.removeChannel(channel);
       };
-    } else {
-      // Fallback to localStorage if not authenticated
-      loadLocalStorageReactions();
-
-      // Listen to localStorage changes (for same-tab updates)
-      let timeoutId: NodeJS.Timeout;
-      const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === 'place_reactions') {
-          clearTimeout(timeoutId);
-          timeoutId = setTimeout(() => {
-            loadLocalStorageReactions();
-          }, 300);
-        }
-      };
-
-      // Also listen to custom event for same-tab updates
-      const handleCustomStorageChange = () => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-          loadLocalStorageReactions();
-        }, 300);
-      };
-
-      window.addEventListener('storage', handleStorageChange);
-      window.addEventListener('place_reactions_updated', handleCustomStorageChange);
-
-      return () => {
-        clearTimeout(timeoutId);
-        window.removeEventListener('storage', handleStorageChange);
-        window.removeEventListener('place_reactions_updated', handleCustomStorageChange);
-      };
     }
-  }, [user, loadUserReactions, loadLocalStorageReactions]);
+  }, [user, loadUserReactions]);
 
 
-  const handleFilterChange = (newFilters: Record<string, string[]>) => {
-    setFilters(newFilters);
-  };
+  const handleFilterChange = useCallback((newFilters: Record<string, string[]>) => {
+    isUpdatingFromFilterBar.current = true;
+
+    const cleanedFilters: Record<string, string[]> = {};
+
+    Object.keys(newFilters).forEach(key => {
+      if (key === 'list') {
+        if (newFilters.list && newFilters.list.length > 0) {
+          cleanedFilters.list = [newFilters.list[0]];
+        }
+      } else {
+        cleanedFilters[key] = newFilters[key];
+      }
+    });
+
+    const newSearchParams = new URLSearchParams(searchParams);
+
+    if (cleanedFilters.list && cleanedFilters.list.length > 0) {
+      newSearchParams.set('list', cleanedFilters.list[0]);
+    } else {
+      newSearchParams.delete('list');
+    }
+
+    setFilters(cleanedFilters);
+    setSearchParams(newSearchParams, { replace: true });
+  }, [searchParams]);
 
   const filteredPlaces = useMemo(() => {
-    // Places are already filtered by city in usePlaces, apply other filters
+    if (!allPlaces || allPlaces.length === 0) {
+      return [];
+    }
+
+    if (filters.list && filters.list.length > 0 && Object.keys(userReactionsById).length === 0 && Object.keys(userReactions).length === 0 && user) {
+      return [];
+    }
+
     const result = filterPlaces(
       allPlaces,
       filters,
@@ -404,7 +411,7 @@ export default function MapPage() {
     );
 
     return result;
-  }, [allPlaces, filters, userReactions, userReactionsById, cuisineReactions, homeCity]);
+  }, [allPlaces, filters, userReactions, userReactionsById, cuisineReactions, homeCity, user]);
 
   const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null, placeId?: string) => {
     // Используем реакции по ID если доступны, иначе по имени
@@ -1007,7 +1014,7 @@ function CardsView({ places, userReactions, userReactionsById, onReactionToggle,
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             { paginatedPlaces.map((place, index) => (
               <motion.div
-                key={ place.name }
+                key={ place.id }
                 initial={ { opacity: 0, y: 20 } }
                 animate={ { opacity: 1, y: 0 } }
                 transition={ { delay: index * 0.05 } }

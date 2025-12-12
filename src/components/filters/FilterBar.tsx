@@ -71,9 +71,19 @@ export function FilterBar({ onFilterChange, filters: externalFilters }: FilterBa
 
   const toggleFilter = (category: string, value: string) => {
     const current = activeFilters[category] || [];
-    const updated = current.includes(value)
-      ? current.filter((v) => v !== value)
-      : [...current, value];
+
+    let updated: string[];
+    if (category === 'list') {
+      if (current.includes(value)) {
+        updated = [];
+      } else {
+        updated = [value];
+      }
+    } else {
+      updated = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+    }
 
     const newFilters = {
       ...activeFilters,
