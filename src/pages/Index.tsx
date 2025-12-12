@@ -9,6 +9,7 @@ import { MessageCircle, Map, Heart, Sparkles, Globe, Shield, ChevronRight } from
 import heroDiner from "@/assets/hero-diner.jpg";
 import { supabase } from "@/integrations/supabase/client";
 import { WorldCoverageHeatmap } from "@/components/WorldCoverageHeatmap";
+import { useCountriesCount } from "@/hooks/useCountriesCount";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const features = [
+const getFeatures = (countriesCount: number | null) => [
   {
     icon: MessageCircle,
     title: "AI-Powered Discovery",
@@ -36,7 +37,9 @@ const features = [
   {
     icon: Globe,
     title: "Global Coverage",
-    description: "Curated restaurants, bars, cafés, and landmarks across the world.",
+    description: countriesCount
+      ? `Curated restaurants, bars, cafés, and landmarks across ${countriesCount} countries.`
+      : "Curated restaurants, bars, cafés, and landmarks across the world.",
   },
   {
     icon: Sparkles,
@@ -53,20 +56,27 @@ const features = [
 export default function Index() {
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
   const [samplePlaces, setSamplePlaces] = useState<any[]>([]);
+  const { countriesCount } = useCountriesCount();
+  const features = getFeatures(countriesCount);
 
-  // Загружаем примеры мест из Supabase
   useEffect(() => {
     const loadSamplePlaces = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('places')
         .select('*')
         .not('latitude', 'is', null)
-        .not('longitude', 'is', null)
-        .limit(3);
+        .not('longitude', 'is', null);
 
-      if (data) {
-        // Преобразуем в формат Place для PlaceCard
-        const converted = data.map(p => ({
+      if (error) {
+        console.error('Error loading sample places:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const shuffled = [...data].sort(() => Math.random() - 0.5);
+        const randomPlaces = shuffled.slice(0, 3);
+
+        const converted = randomPlaces.map(p => ({
           id: p.id,
           name: p.name,
           address: p.address || '',
@@ -76,7 +86,7 @@ export default function Index() {
           price: (p.price_level as 1 | 2 | 3 | 4) || 2,
           rating: p.rating || 4.0,
           sentiment: p.sentiment_score ? Math.round(p.sentiment_score * 100) : 70,
-          imageUrl: `https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop&sig=${p.id}`,
+          imageUrl: p.photos && p.photos.length > 0 ? p.photos[0] : undefined,
           latitude: p.latitude || 0,
           longitude: p.longitude || 0,
         }));
@@ -143,7 +153,9 @@ export default function Index() {
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle className="text-2xl font-display">Global Coverage</DialogTitle>
             <DialogDescription>
-              Explore over 14,000 curated places across the world. The heat map shows where The Piggy has coverage.
+              { countriesCount
+                ? `Explore over 14,000 curated places across ${countriesCount} countries. The heat map shows where The Piggy has coverage.`
+                : "Explore over 14,000 curated places across the world. The heat map shows where The Piggy has coverage." }
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-auto bg-charcoal-dark p-4">
@@ -223,7 +235,7 @@ export default function Index() {
                 viewport={ { once: true } }
                 transition={ { delay: index * 0.15 } }
               >
-                <PlaceCard { ...place } />
+                <PlaceCard { ...place } hideActions={ true } />
               </motion.div>
             )) }
           </div>

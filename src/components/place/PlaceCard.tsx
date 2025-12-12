@@ -21,6 +21,7 @@ interface PlaceCardProps {
     dislike: boolean;
   };
   onReactionToggle?: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => void;
+  hideActions?: boolean;
 }
 
 type ReactionType = "heart" | "bookmark" | "like" | "dislike" | null;
@@ -37,6 +38,7 @@ export function PlaceCard({
   className,
   reactions: reactionsProp,
   onReactionToggle,
+  hideActions = false,
 }: PlaceCardProps) {
   // Use hook as fallback if reactions are not provided via props
   // Skip hook if reactions are provided via props to avoid unnecessary requests
@@ -154,40 +156,42 @@ export function PlaceCard({
         </div>
 
         {/* Reactions */ }
-        <div className="flex items-center gap-1 pt-3 border-t border-border">
-          <ReactionButton
-            icon={ Heart }
-            active={ uiReaction === "heart" }
-            onClick={ () => handleReaction("heart") }
-            label="Favourite"
-            activeColor="text-coral"
-            fillColor="coral"
-          />
-          <ReactionButton
-            icon={ Plus }
-            active={ uiReaction === "bookmark" }
-            onClick={ () => handleReaction("bookmark") }
-            label="Want to Go"
-            activeColor="text-gold"
-            fillColor="gold"
-          />
-          <ReactionButton
-            icon={ ThumbsUp }
-            active={ uiReaction === "like" }
-            onClick={ () => handleReaction("like") }
-            label="Like"
-            activeColor="text-sage"
-            fillColor="sage"
-          />
-          <ReactionButton
-            icon={ ThumbsDown }
-            active={ uiReaction === "dislike" }
-            onClick={ () => handleReaction("dislike") }
-            label="Dislike"
-            activeColor="text-muted-foreground"
-            fillColor="muted-foreground"
-          />
-        </div>
+        { !hideActions && (
+          <div className="flex items-center gap-1 pt-3 border-t border-border">
+            <ReactionButton
+              icon={ Heart }
+              active={ uiReaction === "heart" }
+              onClick={ () => handleReaction("heart") }
+              label="Favourite"
+              activeColor="text-coral"
+              fillColor="coral"
+            />
+            <ReactionButton
+              icon={ Plus }
+              active={ uiReaction === "bookmark" }
+              onClick={ () => handleReaction("bookmark") }
+              label="Want to Go"
+              activeColor="text-gold"
+              fillColor="gold"
+            />
+            <ReactionButton
+              icon={ ThumbsUp }
+              active={ uiReaction === "like" }
+              onClick={ () => handleReaction("like") }
+              label="Like"
+              activeColor="text-sage"
+              fillColor="sage"
+            />
+            <ReactionButton
+              icon={ ThumbsDown }
+              active={ uiReaction === "dislike" }
+              onClick={ () => handleReaction("dislike") }
+              label="Dislike"
+              activeColor="text-muted-foreground"
+              fillColor="muted-foreground"
+            />
+          </div>
+        ) }
       </div>
     </motion.div>
   );
