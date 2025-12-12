@@ -3,8 +3,10 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useReactions } from "@/hooks/useReactions";
 import { getPlaceImageUrl } from "@/lib/place-images";
+import { usePlaceStats } from "@/hooks/usePlaceStats";
 
 interface PlaceCardProps {
+  id?: string;
   name: string;
   address: string;
   category: string;
@@ -20,13 +22,14 @@ interface PlaceCardProps {
     like: boolean;
     dislike: boolean;
   };
-  onReactionToggle?: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => void;
+  onReactionToggle?: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null, placeId?: string) => void;
   hideActions?: boolean;
 }
 
 type ReactionType = "heart" | "bookmark" | "like" | "dislike" | null;
 
 export function PlaceCard({
+  id,
   name,
   address,
   category,
@@ -41,9 +44,11 @@ export function PlaceCard({
   hideActions = false,
 }: PlaceCardProps) {
   // Use hook as fallback if reactions are not provided via props
-  // Skip hook if reactions are provided via props to avoid unnecessary requests
+  // Also use hook if onReactionToggle is provided but reactionsProp might be incomplete
+  // This ensures we always have the latest reaction state
   const useHookFallback = !reactionsProp && !onReactionToggle;
-  const { reaction: hookReaction, toggleReaction: hookToggleReaction } = useReactions(name, !useHookFallback);
+  const { reaction: hookReaction, toggleReaction: hookToggleReaction } = useReactions(name, id, useHookFallback);
+  const { stats: placeStats } = usePlaceStats(id);
 
   const handleReaction = async (type: ReactionType) => {
     if (useHookFallback) {
@@ -62,11 +67,12 @@ export function PlaceCard({
 
       await hookToggleReaction(supabaseType);
     } else if (onReactionToggle) {
-      onReactionToggle(name, type);
+      onReactionToggle(name, type, id);
     }
   };
 
   // Determine current reaction from props or hook
+  // Priority: reactionsProp (if complete) > hookReaction
   const uiReaction: ReactionType = useHookFallback
     ? (hookReaction === 'love' ? 'heart' :
       hookReaction === 'want_to_go' ? 'bookmark' :
@@ -77,7 +83,12 @@ export function PlaceCard({
       reactionsProp?.wantToGo ? 'bookmark' :
         reactionsProp?.like ? 'like' :
           reactionsProp?.dislike ? 'dislike' :
-            null);
+            // Fallback to hook if reactionsProp doesn't have the reaction
+            (hookReaction === 'love' ? 'heart' :
+              hookReaction === 'want_to_go' ? 'bookmark' :
+                hookReaction === 'like' ? 'like' :
+                  hookReaction === 'dislike' ? 'dislike' :
+                    null));
 
   const priceLabel = "$".repeat(price);
 
@@ -144,15 +155,12 @@ export function PlaceCard({
         </div>
 
         {/* Stats */ }
-        <div className="flex items-center gap-4 text-sm mb-4">
-          <div className="flex items-center gap-1">
-            <Star className="h-4 w-4 text-gold fill-gold" />
-            <span className="font-medium">{ rating.toFixed(1) }</span>
-          </div>
-          <div className="flex items-center gap-1 text-muted-foreground">
-            <span className="text-sage">{ sentiment }%</span>
-            <span>positive</span>
-          </div>
+        <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
+          <span>🐖</span>
+          <span>|</span>
+          <span className="text-sage">👍{ placeStats.likesPercentage }%</span>
+          <span>|</span>
+          <span className="text-coral">❤️{ placeStats.favouritesCount }x</span>
         </div>
 
         {/* Reactions */ }

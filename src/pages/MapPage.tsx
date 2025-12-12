@@ -122,6 +122,7 @@ function filterPlaces(
   places: Place[],
   filters: Record<string, string[]>,
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>,
+  userReactionsById: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>,
   cuisineReactions: CuisineReactions,
   homeCity?: string | null
 ): Place[] {
@@ -168,9 +169,9 @@ function filterPlaces(
 
     // Style filter - not available in data yet, skip
 
-    // List filter (favourites, want_to_go)
+    // List filter (favourites, want_to_go) - используем ID для точности
     if (filters.list && filters.list.length > 0) {
-      const reactions = userReactions[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
+      const reactions = userReactionsById[place.id] || userReactions[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
       const matches = filters.list.some((listType) => {
         if (listType === 'favourites') {
           return reactions.favourites;
@@ -208,6 +209,7 @@ export default function MapPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("cards");
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
+  const [userReactionsById, setUserReactionsById] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const { cuisineReactions } = useCuisineReactions();
   const [homeCity, setHomeCity] = useState<string | null>(null);
   const [currentCity, setCurrentCity] = useState<string | null>(null);
@@ -241,18 +243,22 @@ export default function MapPage() {
 
       const parsed = JSON.parse(reactions);
       const result: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> = {};
+      const resultById: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> = {};
 
       allPlaces.forEach(place => {
         const placeReactions = parsed[place.name] || {};
-        result[place.name] = {
+        const reactionData = {
           favourites: placeReactions.heart === true || placeReactions.love === true,
           wantToGo: placeReactions.bookmark === true || placeReactions.want_to_go === true,
           like: placeReactions.like === true,
           dislike: placeReactions.dislike === true,
         };
+        result[place.name] = reactionData;
+        resultById[place.id] = reactionData;
       });
 
       setUserReactions(result);
+      setUserReactionsById(resultById);
     } catch {
       // Ignore errors
     }
@@ -263,8 +269,12 @@ export default function MapPage() {
 
     try {
       const placeNames = allPlaces.map(p => p.name);
-      const reactions = await getUserReactionsForPlaces(user.id, placeNames);
-      setUserReactions(reactions);
+      const placeIds = allPlaces.map(p => p.id);
+      const reactions = await getUserReactionsForPlaces(user.id, placeNames, placeIds);
+
+      // Используем реакции по ID (приоритет) и по имени (fallback)
+      setUserReactions(reactions.byName);
+      setUserReactionsById(reactions.byId);
     } catch (error) {
       console.error('Error loading user reactions:', error);
       loadLocalStorageReactions();
@@ -388,24 +398,56 @@ export default function MapPage() {
       allPlaces,
       filters,
       userReactions,
+      userReactionsById,
       cuisineReactions,
       homeCity
     );
 
     return result;
-  }, [allPlaces, filters, userReactions, cuisineReactions, homeCity]);
+  }, [allPlaces, filters, userReactions, userReactionsById, cuisineReactions, homeCity]);
 
-  const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => {
-    const currentReactions = userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
+  const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null, placeId?: string) => {
+    // Используем реакции по ID если доступны, иначе по имени
+    const currentReactions = placeId && userReactionsById[placeId]
+      ? userReactionsById[placeId]
+      : userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
 
     // Optimistically update UI
-    const newReactions = await toggleReactionForPlace(placeName, currentReactions, type);
+    const newReactions = await toggleReactionForPlace(placeName, currentReactions, type, placeId);
 
-    setUserReactions(prev => ({
-      ...prev,
-      [placeName]: newReactions,
-    }));
-  }, [userReactions]);
+    // ВАЖНО: Обновляем только по ID, чтобы избежать проблем с дубликатами имен
+    if (placeId) {
+      setUserReactionsById(prev => ({
+        ...prev,
+        [placeId]: newReactions,
+      }));
+
+      // Обновляем по имени только если это уникальное имя (нет других мест с таким именем)
+      const placesWithSameName = allPlaces.filter(p => p.name === placeName);
+      if (placesWithSameName.length === 1) {
+        setUserReactions(prev => ({
+          ...prev,
+          [placeName]: newReactions,
+        }));
+      }
+    } else {
+      // Fallback: если нет ID, обновляем по имени (но это не должно происходить)
+      setUserReactions(prev => ({
+        ...prev,
+        [placeName]: newReactions,
+      }));
+    }
+
+    // Reload reactions from database to ensure sync
+    if (user) {
+      setTimeout(() => {
+        loadUserReactions();
+      }, 100);
+    }
+
+    // Dispatch event to sync with profile
+    window.dispatchEvent(new Event('place_reactions_updated'));
+  }, [userReactions, userReactionsById, allPlaces, user, loadUserReactions]);
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -479,6 +521,7 @@ export default function MapPage() {
             <CardsView
               places={ filteredPlaces }
               userReactions={ userReactions }
+              userReactionsById={ userReactionsById }
               onReactionToggle={ handleReactionToggle }
               homeCity={ cityForPlaces }
               isLoadingProfile={ isLoadingProfile }
@@ -832,12 +875,13 @@ function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
 interface CardsViewProps {
   places: Place[];
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>;
-  onReactionToggle: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => void;
+  userReactionsById: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>;
+  onReactionToggle: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null, placeId?: string) => void;
   homeCity?: string | null;
   isLoadingProfile?: boolean;
 }
 
-function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadingProfile }: CardsViewProps) {
+function CardsView({ places, userReactions, userReactionsById, onReactionToggle, homeCity, isLoadingProfile }: CardsViewProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
   const [pageInput, setPageInput] = useState("");
@@ -970,7 +1014,7 @@ function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadin
               >
                 <PlaceCard
                   { ...place }
-                  reactions={ userReactions[place.name] }
+                  reactions={ userReactionsById[place.id] || userReactions[place.name] }
                   onReactionToggle={ onReactionToggle }
                 />
               </motion.div>

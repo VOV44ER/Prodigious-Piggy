@@ -11,7 +11,7 @@ export interface PlaceReactions {
     dislike: boolean;
 }
 
-export const useReactions = (placeName: string, skip: boolean = false) => {
+export const useReactions = (placeName: string, placeId?: string, skip: boolean = false) => {
     const { user } = useAuth();
     const [reaction, setReaction] = useState<ReactionType>(null);
     const [loading, setLoading] = useState(true);
@@ -23,9 +23,10 @@ export const useReactions = (placeName: string, skip: boolean = false) => {
         loadingRef.current = true;
 
         try {
-            // First, find or create place by name
-            const placeId = await getOrCreatePlaceId(placeName);
+            // ВАЖНО: Используем только placeId, если он передан
+            // Если placeId не передан, не загружаем реакции, чтобы избежать проблем с дубликатами имен
             if (!placeId) {
+                console.warn(`PlaceCard: placeId not provided for "${placeName}". Skipping reaction load to avoid duplicate name issues.`);
                 setLoading(false);
                 loadingRef.current = false;
                 return;
@@ -70,7 +71,7 @@ export const useReactions = (placeName: string, skip: boolean = false) => {
         } finally {
             loadingRef.current = false;
         }
-    }, [user, placeName, skip]);
+    }, [user, placeName, placeId, skip]);
 
     useEffect(() => {
         if (skip) {
@@ -121,8 +122,17 @@ export const useReactions = (placeName: string, skip: boolean = false) => {
         }
 
         try {
-            const placeId = await getOrCreatePlaceId(placeName);
-            if (!placeId) return;
+            // ВАЖНО: Используем только placeId, если он передан
+            // Если placeId не передан, используем localStorage fallback
+            // Это предотвращает проблемы с дубликатами имен
+            if (!placeId) {
+                console.warn(`PlaceCard: placeId not provided for "${placeName}". Using localStorage fallback.`);
+                const newReaction = reaction === type ? null : type;
+                setReaction(newReaction);
+                saveToLocalStorage(placeName, newReaction);
+                window.dispatchEvent(new Event('place_reactions_updated'));
+                return;
+            }
 
             const newReaction = reaction === type ? null : type;
 
@@ -174,108 +184,31 @@ export const useReactions = (placeName: string, skip: boolean = false) => {
     return { reaction, loading, toggleReaction };
 };
 
-async function getOrCreatePlaceId(placeName: string): Promise<string | null> {
+async function getPlaceIdByName(placeName: string): Promise<string | null> {
     try {
-        // Generate base slug from name
-        const baseSlug = placeName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/(^-|-$)/g, '');
-
-        // Try to find existing place by name (not slug, since slug might have duplicates)
-        let { data: existingPlace, error: findError } = await supabase
+        // Only search for existing place by name - never create new places
+        // WARNING: If multiple places have the same name, this will return the first one
+        // This function should only be used as a fallback when placeId is not available
+        const { data: existingPlaces, error: findError } = await supabase
             .from('places')
-            .select('id, slug')
-            .eq('name', placeName)
-            .maybeSingle();
-
-        if (existingPlace && !findError) {
-            return existingPlace.id;
-        }
-
-        // If not found and user is authenticated, try to create a new place
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-            // If not authenticated, return null - we'll use localStorage fallback
-            return null;
-        }
-
-        // Generate unique slug by adding a hash suffix if needed
-        let slug = baseSlug;
-        let attempts = 0;
-        const maxAttempts = 10;
-
-        while (attempts < maxAttempts) {
-            // Check if slug exists
-            const { data: existingBySlug } = await supabase
-                .from('places')
-                .select('id')
-                .eq('slug', slug)
-                .maybeSingle();
-
-            if (!existingBySlug) {
-                // Slug is available, break and use it
-                break;
-            }
-
-            // Slug exists, try to find by name instead
-            const { data: existingByName } = await supabase
-                .from('places')
-                .select('id')
-                .eq('name', placeName)
-                .maybeSingle();
-
-            if (existingByName) {
-                // Place with same name exists, return its ID
-                return existingByName.id;
-            }
-
-            // Generate unique slug with hash suffix
-            const hash = Math.random().toString(36).substring(2, 8);
-            slug = `${baseSlug}-${hash}`;
-            attempts++;
-        }
-
-        // Try to insert place
-        const { data: newPlace, error: createError } = await supabase
-            .from('places')
-            .insert({
-                name: placeName,
-                slug: slug,
-            })
             .select('id')
-            .single();
+            .eq('name', placeName)
+            .limit(1);
 
-        if (createError) {
-            // If creation fails due to duplicate slug, try to find by name
-            if (createError.code === '23505') {
-                const { data: retryPlace } = await supabase
-                    .from('places')
-                    .select('id')
-                    .eq('name', placeName)
-                    .maybeSingle();
-
-                if (retryPlace) {
-                    return retryPlace.id;
-                }
-            }
-
-            // If creation fails for other reasons, try to find by name as fallback
-            const { data: retryPlace } = await supabase
-                .from('places')
-                .select('id')
-                .eq('name', placeName)
-                .maybeSingle();
-
-            if (retryPlace) {
-                return retryPlace.id;
-            }
-
-            console.error('Error creating place:', createError);
+        if (findError) {
+            console.error('Error finding place:', findError);
             return null;
         }
 
-        return newPlace?.id || null;
+        // If multiple places exist with the same name, we can't determine which one
+        // Return null to avoid applying reaction to wrong place
+        if (!existingPlaces || existingPlaces.length === 0) {
+            return null;
+        }
+
+        // Only return ID if exactly one place found
+        // If multiple places exist, return null to prevent incorrect reactions
+        return existingPlaces[0]?.id || null;
     } catch (error) {
         console.error('Error getting place ID:', error);
         return null;
@@ -316,86 +249,109 @@ function saveToLocalStorage(placeName: string, reaction: ReactionType) {
 
 export async function getUserReactionsForPlaces(
     userId: string,
-    placeNames: string[]
-): Promise<Record<string, PlaceReactions>> {
+    placeNames: string[],
+    placeIds?: string[]
+): Promise<{ byName: Record<string, PlaceReactions>; byId: Record<string, PlaceReactions> }> {
     try {
-        // ВАЖНО: Места хранятся в Supabase в таблице places
-        // Загружаем только те места, где пользователь ставил реакции
+        // Создаем результат со всеми местами (по умолчанию без реакций)
+        const resultByName: Record<string, PlaceReactions> = {};
+        const resultById: Record<string, PlaceReactions> = {};
 
-        // Получаем только те места, которые уже есть в Supabase (где пользователь ставил реакции)
-        // Используем пагинацию, чтобы не перегружать запрос
-        const BATCH_SIZE = 500; // Обрабатываем по 500 мест за раз
-        const allPlaces: Array<{ id: string; slug: string; name: string }> = [];
-
-        // Разбиваем на батчи для избежания слишком больших запросов
-        for (let i = 0; i < placeNames.length; i += BATCH_SIZE) {
-            const batch = placeNames.slice(i, i + BATCH_SIZE);
-            const { data: places } = await supabase
-                .from('places')
-                .select('id, slug, name')
-                .in('name', batch);
-
-            if (places) {
-                allPlaces.push(...places);
-            }
+        // Сначала создаем маппинг по ID (всегда уникально)
+        if (placeIds && placeIds.length === placeNames.length) {
+            placeIds.forEach((id, index) => {
+                if (id) {
+                    resultById[id] = { favourites: false, wantToGo: false, like: false, dislike: false };
+                }
+            });
         }
 
-        // Создаем результат со всеми местами (по умолчанию без реакций)
-        const result: Record<string, PlaceReactions> = {};
+        // Затем создаем маппинг по имени только для уникальных имен
+        const nameCounts = new Map<string, number>();
         placeNames.forEach(name => {
-            result[name] = { favourites: false, wantToGo: false, like: false, dislike: false };
+            nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
         });
 
-        // Если есть места в Supabase, загружаем реакции для них
-        if (allPlaces && allPlaces.length > 0) {
-            const placeIds = allPlaces.map(p => p.id);
-            const placeNameToId = new Map(allPlaces.map(p => [p.name, p.id]));
-
-            // Get all reactions for these places
-            const { data: reactions } = await supabase
-                .from('user_reactions')
-                .select('place_id, reaction_type')
-                .eq('user_id', userId)
-                .in('place_id', placeIds);
-
-            // Обновляем реакции для мест, которые есть в Supabase
-            if (reactions) {
-                reactions.forEach(reaction => {
-                    // Находим имя места по ID
-                    const placeName = Array.from(placeNameToId.entries())
-                        .find(([_, id]) => id === reaction.place_id)?.[0];
-
-                    if (placeName && result[placeName]) {
-                        if (reaction.reaction_type === 'love') {
-                            result[placeName].favourites = true;
-                        } else if (reaction.reaction_type === 'want_to_go') {
-                            result[placeName].wantToGo = true;
-                        } else if (reaction.reaction_type === 'like') {
-                            result[placeName].like = true;
-                        } else if (reaction.reaction_type === 'dislike') {
-                            result[placeName].dislike = true;
-                        }
-                    }
-                });
+        placeNames.forEach((name, index) => {
+            // Добавляем в resultByName только если имя уникальное
+            if (nameCounts.get(name) === 1) {
+                resultByName[name] = { favourites: false, wantToGo: false, like: false, dislike: false };
             }
+        });
+
+        // ВАЖНО: Если передан массив placeIds, используем его напрямую
+        // Это гарантирует, что реакции применяются к правильным местам, даже если имена одинаковые
+        if (placeIds && placeIds.length > 0 && placeIds.length === placeNames.length) {
+            const placeIdToName = new Map<string, string>();
+            placeNames.forEach((name, index) => {
+                if (placeIds[index]) {
+                    placeIdToName.set(placeIds[index], name);
+                }
+            });
+
+            // Загружаем реакции по placeIds
+            const BATCH_SIZE = 500;
+            for (let i = 0; i < placeIds.length; i += BATCH_SIZE) {
+                const batch = placeIds.slice(i, i + BATCH_SIZE);
+                const { data: reactions } = await supabase
+                    .from('user_reactions')
+                    .select('place_id, reaction_type')
+                    .eq('user_id', userId)
+                    .in('place_id', batch);
+
+                if (reactions) {
+                    reactions.forEach(reaction => {
+                        const placeName = placeIdToName.get(reaction.place_id);
+                        const reactionData = {
+                            favourites: reaction.reaction_type === 'love',
+                            wantToGo: reaction.reaction_type === 'want_to_go',
+                            like: reaction.reaction_type === 'like',
+                            dislike: reaction.reaction_type === 'dislike',
+                        };
+
+                        // Обновляем по ID (приоритет)
+                        if (reaction.place_id && resultById[reaction.place_id]) {
+                            resultById[reaction.place_id] = reactionData;
+                        }
+
+                        // Обновляем по имени только если это уникальное имя
+                        if (placeName) {
+                            // Проверяем, что это единственное место с таким именем
+                            const placesWithSameName = placeIds?.filter((id, idx) => placeNames[idx] === placeName) || [];
+                            if (placesWithSameName.length === 1 && resultByName[placeName]) {
+                                resultByName[placeName] = reactionData;
+                            }
+                        }
+                    });
+                }
+            }
+
+            return { byName: resultByName, byId: resultById };
         }
 
-        return result;
+        // Если placeIds не передан, возвращаем пустые реакции
+        // Это предотвращает проблемы с дубликатами имен
+        return { byName: resultByName, byId: resultById };
     } catch (error) {
         console.error('Error loading user reactions:', error);
-        // Return empty reactions for all places on error
-        const result: Record<string, PlaceReactions> = {};
-        placeNames.forEach(name => {
-            result[name] = { favourites: false, wantToGo: false, like: false, dislike: false };
+        const resultByName: Record<string, PlaceReactions> = {};
+        const resultById: Record<string, PlaceReactions> = {};
+        placeNames.forEach((name, index) => {
+            const defaultReaction = { favourites: false, wantToGo: false, like: false, dislike: false };
+            resultByName[name] = defaultReaction;
+            if (placeIds && placeIds[index]) {
+                resultById[placeIds[index]] = defaultReaction;
+            }
         });
-        return result;
+        return { byName: resultByName, byId: resultById };
     }
 }
 
 export async function toggleReactionForPlace(
     placeName: string,
     currentReactions: PlaceReactions,
-    type: 'heart' | 'bookmark' | 'like' | 'dislike' | null
+    type: 'heart' | 'bookmark' | 'like' | 'dislike' | null,
+    placeId?: string
 ): Promise<{ favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> {
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -419,9 +375,26 @@ export async function toggleReactionForPlace(
     }
 
     try {
-        const placeId = await getOrCreatePlaceId(placeName);
+        // ВАЖНО: Используем только placeId, если он передан
+        // Если placeId не передан, используем localStorage fallback
+        // Это предотвращает проблемы с дубликатами имен
         if (!placeId) {
-            return currentReactions;
+            // Place not found, use localStorage fallback
+            const supabaseType = type === 'heart' ? 'love' : type === 'bookmark' ? 'want_to_go' : type;
+            const newReaction = (type === 'heart' && currentReactions.favourites) ||
+                (type === 'bookmark' && currentReactions.wantToGo) ||
+                (type === 'like' && currentReactions.like) ||
+                (type === 'dislike' && currentReactions.dislike) ? null : supabaseType;
+
+            saveToLocalStorage(placeName, newReaction);
+            window.dispatchEvent(new Event('place_reactions_updated'));
+
+            return {
+                favourites: newReaction === 'love',
+                wantToGo: newReaction === 'want_to_go',
+                like: newReaction === 'like',
+                dislike: newReaction === 'dislike',
+            };
         }
 
         // Map UI reaction types to Supabase reaction types

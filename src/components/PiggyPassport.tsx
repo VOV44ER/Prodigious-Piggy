@@ -107,16 +107,17 @@ export function PiggyPassport() {
             // Загружаем места из Supabase
             const { data: places } = await supabase
                 .from('places')
-                .select('name, cuisine')
+                .select('id, name, cuisine')
                 .limit(1000);
 
             const placeNames = (places || []).map(p => p.name);
-            const reactions = await getUserReactionsForPlaces(user.id, placeNames);
+            const placeIds = (places || []).map(p => p.id);
+            const reactions = await getUserReactionsForPlaces(user.id, placeNames, placeIds);
 
             const experienced = new Set<string>();
-            (places || []).forEach(place => {
+            (places || []).forEach((place, index) => {
                 if (place.cuisine) {
-                    const placeReactions = reactions[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
+                    const placeReactions = reactions.byId[place.id] || reactions.byName[place.name] || { favourites: false, wantToGo: false, like: false, dislike: false };
                     if (placeReactions.favourites) {
                         experienced.add(place.cuisine);
                     }

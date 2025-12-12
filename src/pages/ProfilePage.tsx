@@ -43,14 +43,15 @@ export default function ProfilePage() {
           const placeIds = [...new Set(userReactions.map(r => r.place_id))];
           const { data: places } = await supabase
             .from('places')
-            .select('name')
+            .select('id, name')
             .in('id', placeIds);
 
           const placeNames = places?.map(p => p.name) || [];
-          const reactions = await getUserReactionsForPlaces(user.id, placeNames);
+          const placeIdsArray = places?.map(p => p.id) || [];
+          const reactions = await getUserReactionsForPlaces(user.id, placeNames, placeIdsArray);
 
-          const favourites = Object.values(reactions).filter(r => r.favourites).length;
-          const wantToGo = Object.values(reactions).filter(r => r.wantToGo).length;
+          const favourites = Object.values(reactions.byId).filter(r => r.favourites).length;
+          const wantToGo = Object.values(reactions.byId).filter(r => r.wantToGo).length;
 
           setFavouritesCount(favourites);
           setWantToGoCount(wantToGo);
