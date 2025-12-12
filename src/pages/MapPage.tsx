@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Map, Grid3X3, Navigation, Locate, ChevronLeft, ChevronRight } from "lucide-react";
+import { Map, Grid3X3, Navigation, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
@@ -34,27 +34,7 @@ type ViewMode = "map" | "cards";
 
 const CASABLANCA_CENTER: [number, number] = [-7.5898, 33.5731];
 
-// Calculate distance between two coordinates using Haversine formula
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371; // Earth's radius in kilometers
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) *
-    Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in kilometers
-}
 
-type PlaceWithDistance = Place & { distance?: number };
 
 function extractCityFromAddress(address: string): string | null {
   if (!address) return null;
@@ -142,11 +122,9 @@ function filterPlaces(
   filters: Record<string, string[]>,
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>,
   cuisineReactions: CuisineReactions,
-  userLocation?: { latitude: number; longitude: number },
-  sortByNearest?: boolean,
   homeCity?: string | null
-): PlaceWithDistance[] {
-  // Места уже отфильтрованы по городу на уровне базы данных в usePlaces
+): Place[] {
+  // Places are already filtered by city at the database level in usePlaces
   return places.filter((place) => {
 
     // Exclude places with disliked cuisines
@@ -187,7 +165,7 @@ function filterPlaces(
       }
     }
 
-    // Style filter - пока нет в данных, пропускаем
+    // Style filter - not available in data yet, skip
 
     // List filter (favourites, want_to_go)
     if (filters.list && filters.list.length > 0) {
@@ -207,24 +185,6 @@ function filterPlaces(
     }
 
     return true;
-  }).map((place): PlaceWithDistance => {
-    // Add distance to place if user location is available
-    if (userLocation) {
-      const distance = calculateDistance(
-        userLocation.latitude,
-        userLocation.longitude,
-        place.latitude,
-        place.longitude
-      );
-      return { ...place, distance };
-    }
-    return place;
-  }).filter((place) => {
-    // Filter by 20km radius if nearest is enabled
-    if (sortByNearest && userLocation && place.distance !== undefined) {
-      return place.distance <= 20; // 20km radius
-    }
-    return true;
   }).sort((a, b) => {
     // Prioritize places with liked cuisines
     const aCuisineReaction = a.cuisine ? cuisineReactions[a.cuisine] : null;
@@ -237,10 +197,6 @@ function filterPlaces(
       return 1;
     }
 
-    // Sort by distance if sortByNearest is enabled and both places have distance
-    if (sortByNearest && a.distance !== undefined && b.distance !== undefined) {
-      return a.distance - b.distance;
-    }
     return 0;
   });
 }
@@ -252,10 +208,6 @@ export default function MapPage() {
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const { cuisineReactions } = useCuisineReactions();
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isNearestEnabled, setIsNearestEnabled] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [homeCity, setHomeCity] = useState<string | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
@@ -420,64 +372,18 @@ export default function MapPage() {
     setFilters(newFilters);
   };
 
-  const getCurrentLocation = useCallback(() => {
-    if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser");
-      return;
-    }
-
-    setIsLoadingLocation(true);
-    setLocationError(null);
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-        setIsNearestEnabled(true);
-        setIsLoadingLocation(false);
-      },
-      (error) => {
-        setLocationError("Unable to get your location. Please enable location services.");
-        setIsLoadingLocation(false);
-        setIsNearestEnabled(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
-  }, []);
-
-  const handleNearestToggle = useCallback(() => {
-    if (isNearestEnabled) {
-      setIsNearestEnabled(false);
-      setUserLocation(null);
-    } else {
-      if (userLocation) {
-        setIsNearestEnabled(true);
-      } else {
-        getCurrentLocation();
-      }
-    }
-  }, [isNearestEnabled, userLocation, getCurrentLocation]);
-
   const filteredPlaces = useMemo(() => {
-    // Места уже отфильтрованы по городу в usePlaces, применяем остальные фильтры
+    // Places are already filtered by city in usePlaces, apply other filters
     const result = filterPlaces(
       allPlaces,
       filters,
       userReactions,
       cuisineReactions,
-      userLocation || undefined,
-      isNearestEnabled,
       homeCity
     );
 
     return result;
-  }, [allPlaces, filters, userReactions, cuisineReactions, userLocation, isNearestEnabled, homeCity]);
+  }, [allPlaces, filters, userReactions, cuisineReactions, homeCity]);
 
   const handleReactionToggle = useCallback(async (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => {
     const currentReactions = userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
@@ -510,22 +416,6 @@ export default function MapPage() {
             </div>
 
             <div className="flex items-center gap-3">
-              <Button
-                variant={ isNearestEnabled ? "default" : "outline" }
-                size="sm"
-                className={ cn(
-                  isNearestEnabled && "bg-primary text-primary-foreground"
-                ) }
-                onClick={ handleNearestToggle }
-                disabled={ isLoadingLocation }
-              >
-                <Locate className={ cn("h-4 w-4 mr-1", isLoadingLocation && "animate-spin") } />
-                { isLoadingLocation ? "Locating..." : "Nearest" }
-              </Button>
-              { locationError && (
-                <span className="text-xs text-destructive">{ locationError }</span>
-              ) }
-
               {/* View Toggle */ }
               <div className="flex bg-secondary rounded-lg p-1">
                 <button
@@ -562,7 +452,6 @@ export default function MapPage() {
           { viewMode === "map" ? (
             <MapView
               places={ filteredPlaces }
-              userLocation={ userLocation }
               homeCity={ homeCity }
               isLoadingProfile={ isLoadingProfile }
             />
@@ -583,12 +472,11 @@ export default function MapPage() {
 
 interface MapViewProps {
   places: Place[];
-  userLocation?: { latitude: number; longitude: number } | null;
   homeCity?: string | null;
   isLoadingProfile?: boolean;
 }
 
-function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewProps) {
+function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -650,14 +538,11 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
     mapboxgl.accessToken = token;
 
     const config = getMapConfig(token);
-    // Priority: user location > city center > geocode city > Casablanca center
+    // Priority: city center > geocode city > Casablanca center
     let initialCenter: [number, number] = CASABLANCA_CENTER;
     let initialZoom = DEFAULT_ZOOM;
 
-    if (userLocation) {
-      initialCenter = [userLocation.longitude, userLocation.latitude];
-      initialZoom = 14;
-    } else if (cityCenter) {
+    if (cityCenter) {
       initialCenter = cityCenter;
       initialZoom = 12;
     } else if (homeCity) {
@@ -768,11 +653,6 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
         if (placesWithCoords.length > 0) {
           const bounds = new mapboxgl.LngLatBounds();
 
-          // Add user location to bounds if available
-          if (userLocation) {
-            bounds.extend([userLocation.longitude, userLocation.latitude]);
-          }
-
           placesWithCoords.forEach(place => {
             bounds.extend([place.longitude, place.latitude]);
           });
@@ -781,29 +661,17 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
             padding: { top: 50, bottom: 50, left: 50, right: 50 },
             maxZoom: 14
           });
-        } else if (userLocation) {
-          // If no places but user location available, center on user location
-          map.current.flyTo({
-            center: [userLocation.longitude, userLocation.latitude],
-            zoom: 14,
-          });
         } else if (cityCenter) {
-          // Если нет мест, но есть центр города, центрируем на него
+          // If no places but city center available, center on city
           map.current.flyTo({
             center: cityCenter,
             zoom: 12,
           });
         } else {
-          // Если нет мест и нет центра города, центрируем на Касабланку
+          // If no places and no city center, center on Casablanca
           map.current.setCenter(CASABLANCA_CENTER);
           map.current.setZoom(DEFAULT_ZOOM);
         }
-      } else if (userLocation) {
-        // If no places but user location available, center on user location
-        map.current.flyTo({
-          center: [userLocation.longitude, userLocation.latitude],
-          zoom: 14,
-        });
       } else if (cityCenter) {
         // If no places but city center available, center on city
         map.current.flyTo({
@@ -811,7 +679,7 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
           zoom: 12,
         });
       } else {
-        // Если нет мест и нет центра города, центрируем на Касабланку
+        // If no places and no city center, center on Casablanca
         map.current.setCenter(CASABLANCA_CENTER);
         map.current.setZoom(DEFAULT_ZOOM);
       }
@@ -833,11 +701,11 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
         map.current = null;
       }
     };
-  }, [places, userLocation, homeCity, cityCenter]);
+  }, [places, homeCity, cityCenter]);
 
   // Update map center when cityCenter changes or when places are filtered
   useEffect(() => {
-    if (!map.current || !homeCity || userLocation) return;
+    if (!map.current || !homeCity) return;
 
     // Если есть отфильтрованные места, используем их для центрирования
     if (places.length > 0) {
@@ -864,18 +732,7 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
         duration: 1000
       });
     }
-  }, [cityCenter, places, homeCity, userLocation]);
-
-  // Update map center when user location changes
-  useEffect(() => {
-    if (!map.current || !userLocation) return;
-
-    map.current.flyTo({
-      center: [userLocation.longitude, userLocation.latitude],
-      zoom: 14,
-      duration: 1000,
-    });
-  }, [userLocation]);
+  }, [cityCenter, places, homeCity]);
 
   if (mapError) {
     return (
