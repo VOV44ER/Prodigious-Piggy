@@ -14,6 +14,7 @@ import { getUserReactionsForPlaces, toggleReactionForPlace } from "@/hooks/useRe
 import { useCuisineReactions, type CuisineReactions } from "@/hooks/useCuisineReactions";
 import { usePlaces, type Place } from "@/hooks/usePlaces";
 import { supabase } from "@/integrations/supabase/client";
+import { getPlaceIconUrl } from "@/lib/place-icons";
 
 type ViewMode = "map" | "cards";
 
@@ -707,13 +708,25 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
         if (place.latitude && place.longitude) {
           const el = document.createElement('div');
           el.className = 'custom-marker';
-          el.style.width = '32px';
-          el.style.height = '32px';
-          el.style.borderRadius = '50%';
-          el.style.backgroundColor = 'hsl(var(--primary))';
-          el.style.border = '3px solid white';
+          el.style.width = '40px';
+          el.style.height = '40px';
           el.style.cursor = 'pointer';
+          el.style.display = 'flex';
+          el.style.alignItems = 'center';
+          el.style.justifyContent = 'center';
+          el.style.background = 'white';
+          el.style.borderRadius = '50%';
+          el.style.border = '3px solid white';
           el.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+          el.style.padding = '4px';
+
+          const iconUrl = getPlaceIconUrl(place.category);
+          const img = document.createElement('img');
+          img.src = iconUrl;
+          img.style.width = '28px';
+          img.style.height = '28px';
+          img.style.objectFit = 'contain';
+          el.appendChild(img);
 
           const marker = new mapboxgl.Marker(el)
             .setLngLat([place.longitude, place.latitude])
