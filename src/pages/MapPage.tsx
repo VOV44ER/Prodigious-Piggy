@@ -4,7 +4,21 @@ import { Navbar } from "@/components/layout/Navbar";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { PlaceCard } from "@/components/place/PlaceCard";
 import { Button } from "@/components/ui/button";
-import { Map, Grid3X3, Navigation, Locate } from "lucide-react";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+} from "@/components/ui/pagination";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Map, Grid3X3, Navigation, Locate, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
@@ -48,11 +62,11 @@ function extractCityFromAddress(address: string): string | null {
   const parts = address.split(',').map(p => p.trim());
   if (parts.length < 2) return null;
 
-  // Для адресов типа "Street, City, State ZIP, Country" или "Street, City, Country"
-  // Пытаемся найти город - обычно это предпоследний элемент, но если предпоследний выглядит как ZIP/State, берем третий с конца
+  // For addresses like "Street, City, State ZIP, Country" or "Street, City, Country"
+  // Try to find the city - usually it's the second-to-last element, but if the second-to-last looks like ZIP/State, take the third from the end
   if (parts.length >= 3) {
     const secondLast = parts[parts.length - 2];
-    // Если предпоследний элемент выглядит как ZIP код или штат (содержит цифры или короткий), берем третий с конца
+    // If the second-to-last element looks like a ZIP code or state (contains numbers or is short), take the third from the end
     if (/^\d+/.test(secondLast) || secondLast.length <= 5) {
       if (parts.length >= 3) {
         return parts[parts.length - 3];
@@ -62,7 +76,7 @@ function extractCityFromAddress(address: string): string | null {
     }
   }
 
-  // Если только 2 части, город - это первая часть
+  // If only 2 parts, the city is the first part
   if (parts.length === 2) {
     return parts[0];
   }
@@ -71,12 +85,12 @@ function extractCityFromAddress(address: string): string | null {
 }
 
 function normalizeCityName(cityName: string): string {
-  // Нормализуем названия городов для сравнения
+  // Normalize city names for comparison
   return cityName
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ')
-    // Заменяем альтернативные названия
+    // Replace alternative names
     .replace(/kiev/g, 'kyiv')
     .replace(/moscow/g, 'moskva');
 }
@@ -84,22 +98,22 @@ function normalizeCityName(cityName: string): string {
 function matchesHomeCity(place: Place, homeCity: string | null): boolean {
   if (!homeCity) return true;
 
-  // homeCity в формате "City, Country" (например, "Kyiv, Ukraine")
+  // homeCity in format "City, Country" (e.g., "Kyiv, Ukraine")
   const parts = homeCity.split(',').map(p => p.trim());
   const homeCityName = parts[0].trim().toLowerCase();
   const homeCountryName = parts.length > 1 ? parts[1].trim().toLowerCase() : null;
 
-  // Точное сравнение города (case-insensitive)
+  // Exact city comparison (case-insensitive)
   let cityMatches = false;
 
   if (place.city) {
     const placeCityName = place.city.trim().toLowerCase();
-    // Только точное совпадение
+    // Only exact match
     if (placeCityName === homeCityName) {
       cityMatches = true;
     }
   } else {
-    // Fallback: парсим адрес, если city не указан
+    // Fallback: parse address if city is not specified
     const cityFromAddress = extractCityFromAddress(place.address);
     if (cityFromAddress) {
       const addressCityName = cityFromAddress.trim().toLowerCase();
@@ -111,16 +125,16 @@ function matchesHomeCity(place: Place, homeCity: string | null): boolean {
 
   if (!cityMatches) return false;
 
-  // Если указана страна, проверяем точное совпадение страны
+  // If country is specified, check exact country match
   if (homeCountryName && place.country) {
     const placeCountryName = place.country.trim().toLowerCase();
-    // Только точное совпадение страны
+    // Only exact country match
     if (placeCountryName !== homeCountryName) {
-      return false; // Город совпадает, но страна не совпадает
+      return false; // City matches but country doesn't
     }
   }
 
-  return true; // Город совпадает, и страна либо не указана, либо совпадает
+  return true; // City matches, and country is either not specified or matches
 }
 
 function filterPlaces(
@@ -553,15 +567,13 @@ export default function MapPage() {
               isLoadingProfile={ isLoadingProfile }
             />
           ) : (
-            <div className="h-full overflow-y-auto">
-              <CardsView
-                places={ filteredPlaces }
-                userReactions={ userReactions }
-                onReactionToggle={ handleReactionToggle }
-                homeCity={ homeCity }
-                isLoadingProfile={ isLoadingProfile }
-              />
-            </div>
+            <CardsView
+              places={ filteredPlaces }
+              userReactions={ userReactions }
+              onReactionToggle={ handleReactionToggle }
+              homeCity={ homeCity }
+              isLoadingProfile={ isLoadingProfile }
+            />
           ) }
         </div>
       </main>
@@ -942,10 +954,6 @@ function MapView({ places, userLocation, homeCity, isLoadingProfile }: MapViewPr
 
 interface CardsViewProps {
   places: Place[];
-}
-
-interface CardsViewProps {
-  places: Place[];
   userReactions: Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>;
   onReactionToggle: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null) => void;
   homeCity?: string | null;
@@ -953,9 +961,42 @@ interface CardsViewProps {
 }
 
 function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadingProfile }: CardsViewProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [pageInput, setPageInput] = useState("");
+
+  const totalPages = Math.ceil(places.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedPlaces = places.slice(startIndex, endIndex);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setPageInput("");
+  }, [places.length, itemsPerPage]);
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setPageInput(value);
+  };
+
+  const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      const page = parseInt(pageInput, 10);
+      if (!isNaN(page) && page >= 1 && page <= totalPages) {
+        setCurrentPage(page);
+        setPageInput("");
+      }
+    }
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(parseInt(value, 10));
+  };
+
   if (isLoadingProfile) {
     return (
-      <div className="container mx-auto px-4 py-12">
+      <div className="h-full flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">Loading...</p>
@@ -966,8 +1007,8 @@ function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadin
 
   if (!homeCity) {
     return (
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center max-w-md mx-auto">
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
           <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <Map className="h-10 w-10 text-muted-foreground" />
           </div>
@@ -987,8 +1028,8 @@ function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadin
 
   if (places.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-12">
-        <div className="text-center max-w-md mx-auto">
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
           <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
             <Map className="h-10 w-10 text-muted-foreground" />
           </div>
@@ -1003,24 +1044,159 @@ function CardsView({ places, userReactions, onReactionToggle, homeCity, isLoadin
     );
   }
 
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 7;
+
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      if (currentPage <= 3) {
+        for (let i = 1; i <= 5; i++) {
+          pages.push(i);
+        }
+        pages.push('ellipsis');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 2) {
+        pages.push(1);
+        pages.push('ellipsis');
+        for (let i = totalPages - 4; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        pages.push(1);
+        pages.push('ellipsis');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) {
+          pages.push(i);
+        }
+        pages.push('ellipsis');
+        pages.push(totalPages);
+      }
+    }
+
+    return pages;
+  };
+
   return (
-    <div className="container mx-auto px-4 py-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        { places.map((place, index) => (
-          <motion.div
-            key={ place.name }
-            initial={ { opacity: 0, y: 20 } }
-            animate={ { opacity: 1, y: 0 } }
-            transition={ { delay: index * 0.05 } }
-          >
-            <PlaceCard
-              { ...place }
-              reactions={ userReactions[place.name] }
-              onReactionToggle={ onReactionToggle }
-            />
-          </motion.div>
-        )) }
+    <div className="h-full flex flex-col">
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto px-4 py-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            { paginatedPlaces.map((place, index) => (
+              <motion.div
+                key={ place.name }
+                initial={ { opacity: 0, y: 20 } }
+                animate={ { opacity: 1, y: 0 } }
+                transition={ { delay: index * 0.05 } }
+              >
+                <PlaceCard
+                  { ...place }
+                  reactions={ userReactions[place.name] }
+                  onReactionToggle={ onReactionToggle }
+                />
+              </motion.div>
+            )) }
+          </div>
+        </div>
       </div>
+
+      { places.length > 0 && (
+        <div className="border-t border-border bg-card/50 py-4">
+          <div className="container mx-auto px-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  Items per page:
+                </span>
+                <Select value={ itemsPerPage.toString() } onValueChange={ handleItemsPerPageChange }>
+                  <SelectTrigger className="w-[100px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="15">15</SelectItem>
+                    <SelectItem value="30">30</SelectItem>
+                    <SelectItem value="60">60</SelectItem>
+                    <SelectItem value="120">120</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              { totalPages > 1 && (
+                <Pagination>
+                  <PaginationContent>
+                    <PaginationItem>
+                      <Button
+                        variant="ghost"
+                        size="default"
+                        onClick={ () => setCurrentPage(prev => Math.max(1, prev - 1)) }
+                        disabled={ currentPage === 1 }
+                        className="gap-1 pl-2.5"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <span>Previous</span>
+                      </Button>
+                    </PaginationItem>
+
+                    { getPageNumbers().map((page, index) => (
+                      <PaginationItem key={ index }>
+                        { page === 'ellipsis' ? (
+                          <PaginationEllipsis />
+                        ) : (
+                          <Button
+                            variant={ currentPage === page ? "outline" : "ghost" }
+                            size="icon"
+                            onClick={ () => setCurrentPage(page as number) }
+                            className={ cn(
+                              "h-9 w-9",
+                              currentPage === page && "bg-background"
+                            ) }
+                          >
+                            { page }
+                          </Button>
+                        ) }
+                      </PaginationItem>
+                    )) }
+
+                    <PaginationItem>
+                      <Button
+                        variant="ghost"
+                        size="default"
+                        onClick={ () => setCurrentPage(prev => Math.min(totalPages, prev + 1)) }
+                        disabled={ currentPage === totalPages }
+                        className="gap-1 pr-2.5"
+                      >
+                        <span>Next</span>
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              ) }
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  Page:
+                </span>
+                <Input
+                  type="number"
+                  min={ 1 }
+                  max={ totalPages }
+                  value={ pageInput }
+                  onChange={ handlePageInputChange }
+                  onKeyDown={ handlePageInputKeyDown }
+                  placeholder={ currentPage.toString() }
+                  className="w-20"
+                />
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                  of { totalPages }
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) }
     </div>
   );
 }

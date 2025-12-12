@@ -78,6 +78,10 @@ export function PlaceCard({
 
   const priceLabel = "$".repeat(price);
 
+  const cuisineBadges = cuisine
+    ? cuisine.split(';').map(c => c.trim()).filter(c => c.length > 0)
+    : [];
+
   return (
     <motion.div
       initial={ { opacity: 0, y: 20 } }
@@ -103,6 +107,19 @@ export function PlaceCard({
         <span className="absolute top-3 left-3 px-3 py-1 bg-charcoal-dark/80 text-cream text-xs font-medium rounded-full backdrop-blur-sm">
           { category }
         </span>
+        {/* Cuisine Badges at bottom of image */ }
+        { cuisineBadges.length > 0 && (
+          <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+            { cuisineBadges.map((badge, index) => (
+              <span
+                key={ index }
+                className="px-2 py-1 bg-coral/90 text-white text-xs font-medium rounded-md backdrop-blur-sm shadow-sm"
+              >
+                { badge }
+              </span>
+            )) }
+          </div>
+        ) }
       </div>
 
       {/* Content */ }
@@ -120,12 +137,6 @@ export function PlaceCard({
           <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
           <span className="line-clamp-1">{ address }</span>
         </div>
-
-        { cuisine && (
-          <span className="inline-block px-2 py-0.5 bg-secondary text-secondary-foreground text-xs rounded-md mb-3">
-            { cuisine }
-          </span>
-        ) }
 
         {/* Stats */ }
         <div className="flex items-center gap-4 text-sm mb-4">
