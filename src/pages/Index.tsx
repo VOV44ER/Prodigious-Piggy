@@ -1,13 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { PlaceCard } from "@/components/place/PlaceCard";
 import { motion } from "framer-motion";
 import { MessageCircle, Map, Heart, Sparkles, Globe, Shield, ChevronRight } from "lucide-react";
 import heroDiner from "@/assets/hero-diner.jpg";
-import { supabase } from "@/integrations/supabase/client";
 import { WorldCoverageHeatmap } from "@/components/WorldCoverageHeatmap";
 import { useCountriesCount } from "@/hooks/useCountriesCount";
 import {
@@ -55,46 +53,8 @@ const getFeatures = (countriesCount: number | null) => [
 
 export default function Index() {
   const [isMapDialogOpen, setIsMapDialogOpen] = useState(false);
-  const [samplePlaces, setSamplePlaces] = useState<any[]>([]);
   const { countriesCount } = useCountriesCount();
   const features = getFeatures(countriesCount);
-
-  useEffect(() => {
-    const loadSamplePlaces = async () => {
-      const { data, error } = await supabase
-        .from('places')
-        .select('*')
-        .not('latitude', 'is', null)
-        .not('longitude', 'is', null);
-
-      if (error) {
-        console.error('Error loading sample places:', error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const shuffled = [...data].sort(() => Math.random() - 0.5);
-        const randomPlaces = shuffled.slice(0, 3);
-
-        const converted = randomPlaces.map(p => ({
-          id: p.id,
-          name: p.name,
-          address: p.address || '',
-          city: p.city,
-          category: p.category || 'Restaurant',
-          cuisine: p.cuisine || p.cuisine_type?.[0],
-          price: (p.price_level as 1 | 2 | 3 | 4) || 2,
-          rating: p.rating || 4.0,
-          sentiment: p.sentiment_score ? Math.round(p.sentiment_score * 100) : 70,
-          imageUrl: p.photos && p.photos.length > 0 ? p.photos[0] : undefined,
-          latitude: p.latitude || 0,
-          longitude: p.longitude || 0,
-        }));
-        setSamplePlaces(converted);
-      }
-    };
-    loadSamplePlaces();
-  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -225,20 +185,6 @@ export default function Index() {
               Every place in The Piggy is hand-selected and verified. Here's a taste of what you'll discover.
             </p>
           </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            { samplePlaces.map((place, index) => (
-              <motion.div
-                key={ place.name }
-                initial={ { opacity: 0, y: 20 } }
-                whileInView={ { opacity: 1, y: 0 } }
-                viewport={ { once: true } }
-                transition={ { delay: index * 0.15 } }
-              >
-                <PlaceCard { ...place } hideActions={ true } />
-              </motion.div>
-            )) }
-          </div>
 
           <motion.div
             initial={ { opacity: 0 } }
