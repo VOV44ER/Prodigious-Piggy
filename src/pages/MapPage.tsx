@@ -83,35 +83,43 @@ function normalizeCityName(cityName: string): string {
 function matchesHomeCity(place: Place, homeCity: string | null): boolean {
   if (!homeCity) return true;
 
-  const homeCityName = normalizeCityName(homeCity.split(',')[0].trim());
+  // homeCity в формате "City, Country" (например, "Kyiv, Ukraine")
+  const parts = homeCity.split(',').map(p => p.trim());
+  const homeCityName = parts[0].trim().toLowerCase();
+  const homeCountryName = parts.length > 1 ? parts[1].trim().toLowerCase() : null;
 
-  // Используем поле city из Place, если оно есть
+  // Точное сравнение города (case-insensitive)
+  let cityMatches = false;
+
   if (place.city) {
-    const placeCityName = normalizeCityName(place.city);
-    // Точное совпадение
-    if (placeCityName === homeCityName) return true;
-    // Частичное совпадение (для случаев типа "New York" и "New York City")
-    if (placeCityName.includes(homeCityName) || homeCityName.includes(placeCityName)) {
-      // Проверяем, что это не случайное совпадение (минимум 3 символа)
-      if (homeCityName.length >= 3 && placeCityName.length >= 3) {
-        return true;
+    const placeCityName = place.city.trim().toLowerCase();
+    // Только точное совпадение
+    if (placeCityName === homeCityName) {
+      cityMatches = true;
+    }
+  } else {
+    // Fallback: парсим адрес, если city не указан
+    const cityFromAddress = extractCityFromAddress(place.address);
+    if (cityFromAddress) {
+      const addressCityName = cityFromAddress.trim().toLowerCase();
+      if (addressCityName === homeCityName) {
+        cityMatches = true;
       }
     }
-    return false;
   }
 
-  // Fallback: парсим адрес, если city не указан
-  const cityFromAddress = extractCityFromAddress(place.address);
-  if (!cityFromAddress) return false; // Если не можем определить город, исключаем место
+  if (!cityMatches) return false;
 
-  const addressCityName = normalizeCityName(cityFromAddress);
-  if (addressCityName === homeCityName) return true;
-  if (addressCityName.includes(homeCityName) || homeCityName.includes(addressCityName)) {
-    if (homeCityName.length >= 3 && addressCityName.length >= 3) {
-      return true;
+  // Если указана страна, проверяем точное совпадение страны
+  if (homeCountryName && place.country) {
+    const placeCountryName = place.country.trim().toLowerCase();
+    // Только точное совпадение страны
+    if (placeCountryName !== homeCountryName) {
+      return false; // Город совпадает, но страна не совпадает
     }
   }
-  return false;
+
+  return true; // Город совпадает, и страна либо не указана, либо совпадает
 }
 
 function filterPlaces(

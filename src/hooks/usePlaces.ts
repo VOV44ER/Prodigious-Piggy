@@ -98,11 +98,19 @@ export function usePlaces(homeCity: string | null) {
                 .not('latitude', 'is', null)
                 .not('longitude', 'is', null);
 
-            // Фильтруем по городу на уровне базы данных
-            const homeCityName = normalizeCityName(homeCity.split(',')[0].trim());
+            // Фильтруем по городу и стране на уровне базы данных
+            // homeCity в формате "City, Country" (например, "Kyiv, Ukraine")
+            const parts = homeCity.split(',').map(p => p.trim());
+            const homeCityName = parts[0].trim(); // Используем оригинальное название для точного сравнения
+            const homeCountryName = parts.length > 1 ? parts[1].trim() : null;
 
-            // Используем ilike для поиска по городу (case-insensitive)
-            query = query.ilike('city', `%${homeCityName}%`);
+            // Точное сравнение города (case-insensitive)
+            query = query.ilike('city', homeCityName);
+
+            // Если указана страна, также фильтруем по стране (точное сравнение)
+            if (homeCountryName) {
+                query = query.ilike('country', homeCountryName);
+            }
 
             const { data, error: fetchError } = await query;
 
