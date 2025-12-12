@@ -3,6 +3,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Navbar } from "@/components/layout/Navbar";
 import { FilterBar } from "@/components/filters/FilterBar";
 import { PlaceCard } from "@/components/place/PlaceCard";
+import { CityCombobox } from "@/components/CityCombobox";
 import { Button } from "@/components/ui/button";
 import {
   Pagination,
@@ -18,7 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Map, Grid3X3, Navigation, ChevronLeft, ChevronRight } from "lucide-react";
+import { Map, Grid3X3, Navigation, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import mapboxgl from "mapbox-gl";
@@ -209,10 +210,19 @@ export default function MapPage() {
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const { cuisineReactions } = useCuisineReactions();
   const [homeCity, setHomeCity] = useState<string | null>(null);
+  const [currentCity, setCurrentCity] = useState<string | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
-  // Загружаем места из Supabase с фильтрацией по городу
-  const { places: allPlaces, loading: isLoadingPlaces } = usePlaces(homeCity);
+  // Use currentCity for places, fallback to homeCity
+  const cityForPlaces = currentCity || homeCity;
+  const { places: allPlaces, loading: isLoadingPlaces } = usePlaces(cityForPlaces);
+
+  // Update currentCity when homeCity changes
+  useEffect(() => {
+    if (homeCity && !currentCity) {
+      setCurrentCity(homeCity);
+    }
+  }, [homeCity, currentCity]);
 
   useEffect(() => {
     const listParam = searchParams.get('list');
@@ -407,15 +417,25 @@ export default function MapPage() {
 
         {/* View Toggle & Actions */ }
         <div className="border-b border-border bg-card/50">
-          <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">
+          <div className="container mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4 flex-1 min-w-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="min-w-[200px]">
+                  <CityCombobox
+                    value={ currentCity || "" }
+                    onValueChange={ setCurrentCity }
+                    placeholder="Select city..."
+                  />
+                </div>
+              </div>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
                 { filteredPlaces.length } { filteredPlaces.length === 1 ? "place" : "places" }
                 { Object.keys(filters).length > 0 && ` (filtered from ${allPlaces.length})` }
               </span>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-shrink-0">
               {/* View Toggle */ }
               <div className="flex bg-secondary rounded-lg p-1">
                 <button
@@ -452,7 +472,7 @@ export default function MapPage() {
           { viewMode === "map" ? (
             <MapView
               places={ filteredPlaces }
-              homeCity={ homeCity }
+              homeCity={ cityForPlaces }
               isLoadingProfile={ isLoadingProfile }
             />
           ) : (
@@ -460,7 +480,7 @@ export default function MapPage() {
               places={ filteredPlaces }
               userReactions={ userReactions }
               onReactionToggle={ handleReactionToggle }
-              homeCity={ homeCity }
+              homeCity={ cityForPlaces }
               isLoadingProfile={ isLoadingProfile }
             />
           ) }
