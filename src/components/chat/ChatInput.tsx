@@ -7,9 +7,14 @@ interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  cityName?: string;
 }
 
-export function ChatInput({ onSend, disabled, placeholder = "Ask The Piggy about places in Casablanca..." }: ChatInputProps) {
+export function ChatInput({ onSend, disabled, placeholder, cityName }: ChatInputProps) {
+  const defaultPlaceholder = cityName
+    ? `Ask The Piggy about places in ${cityName}...`
+    : "Ask The Piggy about places...";
+  const finalPlaceholder = placeholder || defaultPlaceholder;
   const [message, setMessage] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -27,7 +32,7 @@ export function ChatInput({ onSend, disabled, placeholder = "Ask The Piggy about
           type="text"
           value={ message }
           onChange={ (e) => setMessage(e.target.value) }
-          placeholder={ placeholder }
+          placeholder={ finalPlaceholder }
           disabled={ disabled }
           className={ cn(
             "flex-1 px-4 py-3 bg-transparent text-foreground placeholder:text-muted-foreground",

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { PlaceCard } from "@/components/place/PlaceCard";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, Plus, Trash2 } from "lucide-react";
+import { Sparkles, Loader2, Plus, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -21,6 +21,7 @@ import { sendChatMessage, type ChatMessage as OpenAIMessage } from "@/integratio
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { usePlaces } from "@/hooks/usePlaces";
 
 interface Message {
   id: string;
@@ -46,52 +47,76 @@ interface ChatSession {
   updated_at: string | null;
 }
 
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    content: "Hey there! 🐷 I'm The Piggy, your foodie discovery assistant for Casablanca, Morocco. Ask me anything — like \"Best Moroccan restaurants in Casablanca\" or \"Where to find great coffee shops\" and I'll help you discover the best curated spots in the city!",
-    isUser: false,
-    timestamp: new Date(),
-  },
-];
+const createInitialMessage = (cityName: string) => ({
+  id: "1",
+  content: `Hey there! 🐷 I'm The Piggy, your foodie discovery assistant for ${cityName}. Ask me anything — like "Best restaurants in ${cityName.split(',')[0]}" or "Where to find great coffee shops" and I'll help you discover the best curated spots in the city!`,
+  isUser: false,
+  timestamp: new Date(),
+});
 
-const suggestedQueries = [
-  "Best Moroccan restaurants in Casablanca",
-  "Where to find great coffee shops",
-  "Romantic dinner spots with a view",
-  "Traditional Moroccan bakeries",
-];
+const createSuggestedQueries = (cityName: string) => {
+  const city = cityName.split(',')[0];
+  return [
+    `Best restaurants in ${city}`,
+    "Where to find great coffee shops",
+    "Romantic dinner spots with a view",
+    "Traditional bakeries",
+  ];
+};
 
-const SYSTEM_PROMPT = `You are The Piggy, a friendly and knowledgeable foodie discovery assistant specializing in Casablanca, Morocco. You help users find the best restaurants, cafes, bakeries, and dining spots in Casablanca.
+const createSystemPrompt = (cityName: string, places: Array<{ name: string; address: string; category: string; cuisine: string | null }>) => {
+  const city = cityName.split(',')[0];
+  const placesList = places.length > 0
+    ? places.slice(0, 20).map(place => {
+      const cuisineStr = place.cuisine ? `, ${place.cuisine}` : '';
+      return `- ${place.name} (${place.category}${cuisineStr}) - ${place.address}`;
+    }).join('\n')
+    : 'No places available yet.';
 
-Available places in Casablanca include:
-- % Arabica (Cafe, Coffee) - N°144 angle boulevard d'anfa et, Rue La Fontaine
-- La Sqala (Restaurant, Moroccan) - Bd des Almohades
-- Le Cabestan (Restaurant, Mediterranean) - Phare d'El hank
-- Le Gatsby (Restaurant, International) - Bd Sour Jdid
-- Maison Amande & Miel (Bakery, French) - Rue d'Ifrane
-- NKOA (Restaurant, African) - Abou Kacem Chabi Quartier
-- Pâtisserie Bennis Habous (Bakery, Moroccan) - Rue Fkih El Gabbas
-- Rick's Café (Restaurant, International) - Bd Sour Jdid
-- Saveurs Du Palais (Restaurant, Moroccan) - Rue Jalal Eddine Sayouti
+  return `You are The Piggy, a friendly and knowledgeable foodie discovery assistant specializing in ${cityName}. You help users find the best restaurants, cafes, bakeries, and dining spots in ${city}.
+
+Available places in ${city} include:
+${placesList}
 
 Your responses should be:
 - Warm, friendly, and conversational (use emojis sparingly, especially 🐷)
-- Helpful and informative about food and dining in Casablanca
-- Focused on restaurant recommendations, cuisine types, locations, and dining experiences in Casablanca
+- Helpful and informative about food and dining in ${city}
+- Focused on restaurant recommendations, cuisine types, locations, and dining experiences in ${city}
 - Mention specific places when relevant to the user's query
-- If users ask about non-food topics or other cities, politely redirect them back to food and dining in Casablanca
+- If users ask about non-food topics or other cities, politely redirect them back to food and dining in ${city}
 
 Keep responses concise but engaging.`;
+};
 
 export default function ChatPage() {
+  const [homeCity, setHomeCity] = useState<string | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const { user } = useAuth();
+  const { places: allPlaces } = usePlaces(homeCity);
+
+  const cityName = homeCity || "your city";
+  const initialMessages = useMemo(() => [createInitialMessage(cityName)], [cityName]);
+  const suggestedQueries = useMemo(() => createSuggestedQueries(cityName), [cityName]);
+  const systemPrompt = useMemo(() => createSystemPrompt(
+    cityName,
+    allPlaces.map(p => ({
+      name: p.name,
+      address: p.address,
+      category: p.category,
+      cuisine: p.cuisine || null,
+    }))
+  ), [cityName, allPlaces]);
+
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [sessionToDelete, setSessionToDelete] = useState<ChatSession | null>(null);
-  const { user } = useAuth();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    const saved = localStorage.getItem('chat_sidebar_open');
+    return saved !== null ? JSON.parse(saved) : true;
+  });
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -99,6 +124,66 @@ export default function ChatPage() {
     () => sessions.find((session) => session.id === selectedSessionId) || null,
     [sessions, selectedSessionId],
   );
+
+  const loadUserProfile = useCallback(async () => {
+    setIsLoadingProfile(true);
+    try {
+      if (user) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('location')
+          .eq('id', user.id)
+          .single();
+
+        if (!error && data?.location) {
+          setHomeCity(data.location);
+        } else {
+          setHomeCity(null);
+        }
+      } else {
+        const storedProfile = localStorage.getItem('user_profile');
+        if (storedProfile) {
+          try {
+            const profile = JSON.parse(storedProfile);
+            if (profile.location) {
+              setHomeCity(profile.location);
+            } else {
+              setHomeCity(null);
+            }
+          } catch {
+            setHomeCity(null);
+          }
+        } else {
+          setHomeCity(null);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setHomeCity(null);
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadUserProfile();
+
+    const handleProfileUpdate = () => {
+      loadUserProfile();
+    };
+
+    window.addEventListener('profile_updated', handleProfileUpdate);
+
+    return () => {
+      window.removeEventListener('profile_updated', handleProfileUpdate);
+    };
+  }, [loadUserProfile]);
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setMessages([createInitialMessage(cityName)]);
+    }
+  }, [cityName, selectedSessionId]);
 
   useEffect(() => {
     if (!user) return;
@@ -245,7 +330,7 @@ export default function ChatPage() {
         content,
       });
 
-      const response = await sendChatMessage(conversationHistory, SYSTEM_PROMPT);
+      const response = await sendChatMessage(conversationHistory, systemPrompt);
 
       if (response.error) {
         const errorMessage: Message = {
@@ -296,7 +381,7 @@ export default function ChatPage() {
 
   const startNewChat = () => {
     setSelectedSessionId(null);
-    setMessages(initialMessages);
+    setMessages([createInitialMessage(cityName)]);
   };
 
   useEffect(() => {
@@ -327,7 +412,7 @@ export default function ChatPage() {
 
     if (selectedSessionId === sessionToDelete.id) {
       setSelectedSessionId(null);
-      setMessages(initialMessages);
+      setMessages([createInitialMessage(cityName)]);
     }
 
     toast({ title: "Chat deleted" });
@@ -338,67 +423,108 @@ export default function ChatPage() {
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       <Navbar />
 
-      <main className="flex-1 pt-16 flex min-h-0 overflow-hidden">
+      <main className="flex-1 pt-16 flex min-h-0 overflow-hidden relative">
         {/* Sidebar - Chat History */ }
-        <div className="w-64 border-r border-border bg-card/30 flex flex-col min-h-0">
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center justify-between">
-              <h2 className="font-semibold text-foreground">Chat History</h2>
-              <span className="text-xs text-muted-foreground">
-                { sessions.length > 0 ? `${sessions.length} chats` : "No chats yet" }
-              </span>
-            </div>
-            <Button size="sm" className="mt-3 w-full justify-center" onClick={ startNewChat }>
-              <Plus className="h-4 w-4 mr-2" />
-              New Chat
-            </Button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2">
-            { sessions.length === 0 ? (
-              <div className="text-center text-sm text-muted-foreground py-8">
-                Start a new conversation
-              </div>
-            ) : (
-              <div className="space-y-1">
-                { sessions.map((session) => (
-                  <button
-                    key={ session.id }
-                    onClick={ () => handleSelectSession(session.id) }
-                    className={ cn(
-                      "group w-full text-left px-3 py-2 rounded-lg transition relative overflow-hidden",
-                      "hover:bg-accent",
-                      selectedSessionId === session.id ? "bg-primary/10 border border-primary" : "",
-                    ) }
+        <motion.div
+          initial={ false }
+          animate={ {
+            width: isSidebarOpen ? 256 : 0,
+            opacity: isSidebarOpen ? 1 : 0,
+          } }
+          transition={ { duration: 0.2, ease: "easeInOut" } }
+          className="border-r border-border bg-card/30 flex flex-col min-h-0 overflow-hidden"
+          style={ { minWidth: isSidebarOpen ? 256 : 0 } }
+        >
+          { isSidebarOpen && (
+            <>
+              <div className="p-4 border-b border-border">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="font-semibold text-foreground">Chat History</h2>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={ () => {
+                      const newState = !isSidebarOpen;
+                      setIsSidebarOpen(newState);
+                      localStorage.setItem('chat_sidebar_open', JSON.stringify(newState));
+                    } }
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          { session.title || "New Chat" }
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          { session.updated_at
-                            ? new Date(session.updated_at).toLocaleDateString([], { month: "short", day: "numeric" })
-                            : "" }
-                        </div>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
-                        onClick={ (e) => {
-                          e.stopPropagation();
-                          confirmDeleteSession(session);
-                        } }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </button>
-                )) }
+                    <PanelLeftClose className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="text-xs text-muted-foreground mb-3">
+                  { sessions.length > 0 ? `${sessions.length} chats` : "No chats yet" }
+                </div>
+                <Button size="sm" className="mt-3 w-full justify-center" onClick={ startNewChat }>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Chat
+                </Button>
               </div>
-            ) }
-          </div>
-        </div>
+              <div className="flex-1 overflow-y-auto p-2">
+                { sessions.length === 0 ? (
+                  <div className="text-center text-sm text-muted-foreground py-8">
+                    Start a new conversation
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    { sessions.map((session) => (
+                      <button
+                        key={ session.id }
+                        onClick={ () => handleSelectSession(session.id) }
+                        className={ cn(
+                          "group w-full text-left px-3 py-2 rounded-lg transition relative overflow-hidden",
+                          "hover:bg-accent",
+                          selectedSessionId === session.id ? "bg-primary/10 border border-primary" : "",
+                        ) }
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">
+                              { session.title || "New Chat" }
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              { session.updated_at
+                                ? new Date(session.updated_at).toLocaleDateString([], { month: "short", day: "numeric" })
+                                : "" }
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground opacity-0 group-hover:opacity-100"
+                            onClick={ (e) => {
+                              e.stopPropagation();
+                              confirmDeleteSession(session);
+                            } }
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </button>
+                    )) }
+                  </div>
+                ) }
+              </div>
+            </>
+          ) }
+        </motion.div>
+
+        {/* Button to expand sidebar when collapsed */ }
+        { !isSidebarOpen && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 absolute left-2 top-20 z-10 bg-card/80 backdrop-blur-sm border border-border shadow-sm"
+            onClick={ () => {
+              const newState = !isSidebarOpen;
+              setIsSidebarOpen(newState);
+              localStorage.setItem('chat_sidebar_open', JSON.stringify(newState));
+            } }
+          >
+            <PanelLeftOpen className="h-5 w-5" />
+          </Button>
+        ) }
 
         {/* Main Chat Area */ }
         <div className="flex-1 flex flex-col min-h-0">
@@ -503,7 +629,11 @@ export default function ChatPage() {
           {/* Input Area */ }
           <div className="border-t border-border bg-background/80 backdrop-blur-sm">
             <div className="container mx-auto px-6 py-4 max-w-3xl">
-              <ChatInput onSend={ handleSend } disabled={ isTyping } />
+              <ChatInput
+                onSend={ handleSend }
+                disabled={ isTyping }
+                cityName={ homeCity ? homeCity.split(',')[0] : undefined }
+              />
             </div>
           </div>
         </div>
