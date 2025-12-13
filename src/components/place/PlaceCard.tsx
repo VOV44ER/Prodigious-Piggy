@@ -66,7 +66,8 @@ export function PlaceCard({
 
   // Calculate likes percentage: likes / (likes + dislikes)
   const totalLikeDislike = likesCount + dislikeCount;
-  const likesPercentage = totalLikeDislike > 0 ? Math.round((likesCount / totalLikeDislike) * 100) : 0;
+  const likesPercentage = totalLikeDislike > 0 ? Math.round((likesCount / totalLikeDislike) * 100) : null;
+  const hasLikesStats = totalLikeDislike > 0;
 
   const handleReaction = async (type: ReactionType) => {
     if (useHookFallback) {
@@ -176,7 +177,9 @@ export function PlaceCard({
         <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
           <span>🐖</span>
           <span>|</span>
-          <span className="text-sage">👍{ likesPercentage }%</span>
+          <span className="text-sage">
+            👍{ hasLikesStats ? `${likesPercentage}%` : '—' }
+          </span>
           <span>|</span>
           <span className="text-coral">❤️{ favouritesCount }x</span>
         </div>
