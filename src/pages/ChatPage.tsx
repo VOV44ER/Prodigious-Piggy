@@ -4,7 +4,7 @@ import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { ChatPlaceItem } from "@/components/chat/ChatPlaceItem";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, Loader2, Plus, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Sparkles, Loader2, Plus, Trash2, PanelLeftClose, PanelLeftOpen, MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { usePlaces } from "@/hooks/usePlaces";
 import { getUserReactionsForPlaces } from "@/hooks/useReactions";
+import { getMapboxToken } from "@/integrations/mapbox/client";
 
 interface Message {
   id: string;
@@ -108,10 +109,18 @@ Keep responses concise but engaging.`;
 export default function ChatPage() {
   const [homeCity, setHomeCity] = useState<string | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [useLiveLocation, setUseLiveLocation] = useState(() => {
+    const saved = localStorage.getItem('chat_use_live_location');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+  const [liveCity, setLiveCity] = useState<string | null>(null);
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const { user } = useAuth();
-  const { places: allPlaces, refetch: refetchPlaces } = usePlaces(homeCity);
 
-  const cityName = homeCity || "your city";
+  const activeCity = useLiveLocation ? liveCity : homeCity;
+  const { places: allPlaces, refetch: refetchPlaces } = usePlaces(activeCity);
+
+  const cityName = activeCity || "your city";
   const initialMessages = useMemo(() => [createInitialMessage(cityName)], [cityName]);
   const suggestedQueries = useMemo(() => createSuggestedQueries(cityName), [cityName]);
   const systemPrompt = useMemo(() => createSystemPrompt(
@@ -223,6 +232,91 @@ export default function ChatPage() {
       setIsLoadingProfile(false);
     }
   }, [user]);
+
+  const getCurrentLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Geolocation not supported",
+        description: "Your browser doesn't support geolocation.",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    setIsLoadingLocation(true);
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        });
+      });
+
+      const { latitude, longitude } = position.coords;
+      const token = getMapboxToken();
+
+      if (!token) {
+        toast({
+          title: "Mapbox token not found",
+          description: "Cannot determine city without Mapbox token.",
+          variant: "destructive",
+        });
+        setIsLoadingLocation(false);
+        return null;
+      }
+
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${token}&types=place&limit=1`
+      );
+
+      const data = await response.json();
+
+      if (data.features && data.features.length > 0) {
+        const feature = data.features[0];
+        const cityName = feature.text || feature.place_name?.split(',')[0];
+        const context = feature.context || [];
+        const country = context.find((c: any) => c.id?.startsWith('country'))?.text;
+        const city = country ? `${cityName}, ${country}` : cityName;
+        setLiveCity(city);
+        setIsLoadingLocation(false);
+        return city;
+      } else {
+        toast({
+          title: "Location not found",
+          description: "Could not determine city from your location.",
+          variant: "destructive",
+        });
+        setIsLoadingLocation(false);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error getting location:', error);
+      toast({
+        title: "Location error",
+        description: error instanceof Error ? error.message : "Failed to get your location.",
+        variant: "destructive",
+      });
+      setIsLoadingLocation(false);
+      return null;
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (useLiveLocation && !liveCity) {
+      getCurrentLocation();
+    }
+  }, [useLiveLocation, liveCity, getCurrentLocation]);
+
+  const handleToggleLiveLocation = async () => {
+    const newValue = !useLiveLocation;
+    setUseLiveLocation(newValue);
+    localStorage.setItem('chat_use_live_location', JSON.stringify(newValue));
+
+    if (newValue && !liveCity) {
+      await getCurrentLocation();
+    }
+  };
 
   useEffect(() => {
     loadUserProfile();
@@ -627,17 +721,49 @@ export default function ChatPage() {
           {/* Header */ }
           <div className="border-b border-border bg-card/50 backdrop-blur-sm">
             <div className="px-6 py-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gradient-coral rounded-xl flex items-center justify-center">
-                  <Sparkles className="h-5 w-5 text-charcoal-dark" />
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-gradient-coral rounded-xl flex items-center justify-center">
+                    <Sparkles className="h-5 w-5 text-charcoal-dark" />
+                  </div>
+                  <div>
+                    <h1 className="font-display font-semibold text-foreground">Chat with The Piggy</h1>
+                    <p className="text-sm text-muted-foreground">
+                      { selectedSession ? selectedSession.title || "New Chat" : "New Chat" }
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="font-display font-semibold text-foreground">Chat with The Piggy</h1>
-                  <p className="text-sm text-muted-foreground">
-                    { selectedSession ? selectedSession.title || "New Chat" : "New Chat" }
-                  </p>
-                </div>
+                <Button
+                  variant={ useLiveLocation ? "default" : "outline" }
+                  size="sm"
+                  className="flex items-center gap-2"
+                  onClick={ handleToggleLiveLocation }
+                  disabled={ isLoadingLocation }
+                >
+                  { isLoadingLocation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Loading...</span>
+                    </>
+                  ) : useLiveLocation ? (
+                    <>
+                      <Navigation className="h-4 w-4" />
+                      <span>Live Location</span>
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="h-4 w-4" />
+                      <span>Home City</span>
+                    </>
+                  ) }
+                </Button>
               </div>
+              { useLiveLocation && liveCity && (
+                <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+                  <Navigation className="h-3 w-3" />
+                  <span>Using location: { liveCity }</span>
+                </div>
+              ) }
             </div>
           </div>
 
