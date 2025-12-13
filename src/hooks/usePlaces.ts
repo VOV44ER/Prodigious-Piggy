@@ -23,6 +23,7 @@ export interface Place {
     wantToGoCount?: number;
     dislikeCount?: number;
     piggyPoints?: 1 | 2 | 3;
+    slug: string;
 }
 
 function normalizeCityName(cityName: string): string {
@@ -89,6 +90,7 @@ function convertPlaceRowToPlace(row: PlaceRow): Place {
         wantToGoCount: (row as any).want_to_go_count || 0,
         dislikeCount: (row as any).dislike_count || 0,
         piggyPoints: normalizedPiggyPoints,
+        slug: row.slug,
     };
 }
 

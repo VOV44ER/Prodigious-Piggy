@@ -1,4 +1,5 @@
 import { Heart, Plus, ThumbsUp, ThumbsDown, MapPin, DollarSign, Star } from "lucide-react";
+import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useReactions } from "@/hooks/useReactions";
@@ -15,6 +16,7 @@ interface PlaceCardProps {
   sentiment: number;
   imageUrl?: string;
   className?: string;
+  slug?: string;
   reactions?: {
     favourites: boolean;
     wantToGo: boolean;
@@ -43,6 +45,7 @@ export function PlaceCard({
   sentiment,
   imageUrl,
   className,
+  slug,
   reactions: reactionsProp,
   onReactionToggle,
   hideActions = false,
@@ -129,101 +132,171 @@ export function PlaceCard({
         className
       ) }
     >
-      {/* Image */ }
-      <div className="relative h-40 bg-muted overflow-hidden">
-        { displayImageUrl ? (
-          <img
-            src={ displayImageUrl }
-            alt={ name }
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-coral opacity-30" />
-        ) }
-        {/* Category Badge */ }
-        <span className="absolute top-3 left-3 px-3 py-1 bg-charcoal-dark/80 text-cream text-xs font-medium rounded-full backdrop-blur-sm">
-          { category }
-        </span>
-        {/* Cuisine Badges at bottom of image */ }
-        { cuisineBadges.length > 0 && (
-          <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
-            { cuisineBadges.map((badge, index) => (
-              <span
-                key={ index }
-                className="px-2 py-1 bg-coral/90 text-white text-xs font-medium rounded-md backdrop-blur-sm shadow-sm"
-              >
-                { badge }
+      { slug ? (
+        <Link to={ `/place/${slug}` } className="block cursor-pointer">
+          {/* Image */ }
+          <div className="relative h-40 bg-muted overflow-hidden">
+            { displayImageUrl ? (
+              <img
+                src={ displayImageUrl }
+                alt={ name }
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-coral opacity-30" />
+            ) }
+            {/* Category Badge */ }
+            <span className="absolute top-3 left-3 px-3 py-1 bg-charcoal-dark/80 text-cream text-xs font-medium rounded-full backdrop-blur-sm">
+              { category }
+            </span>
+            {/* Cuisine Badges at bottom of image */ }
+            { cuisineBadges.length > 0 && (
+              <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+                { cuisineBadges.map((badge, index) => (
+                  <span
+                    key={ index }
+                    className="px-2 py-1 bg-coral/90 text-white text-xs font-medium rounded-md backdrop-blur-sm shadow-sm"
+                  >
+                    { badge }
+                  </span>
+                )) }
+              </div>
+            ) }
+          </div>
+
+          {/* Content */ }
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <h3 className="font-display font-semibold text-lg text-foreground leading-tight line-clamp-1">
+                { name }
+              </h3>
+              <span className="text-coral font-semibold text-sm whitespace-nowrap">
+                { priceLabel }
               </span>
-            )) }
+            </div>
+
+            {/* Stats and Address */ }
+            <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3">
+              <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="line-clamp-1">{ address }</span>
+            </div>
+
+            {/* Stats */ }
+            <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
+              <span>{ '🐖'.repeat(piggyPoints || 1) }</span>
+              <span>|</span>
+              <span className="text-sage">
+                👍{ hasLikesStats ? `${likesPercentage}%` : '—' }
+              </span>
+              <span>|</span>
+              <span className="text-coral">❤️{ favouritesCount }x</span>
+            </div>
           </div>
-        ) }
-      </div>
-
-      {/* Content */ }
-      <div className="p-4">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="font-display font-semibold text-lg text-foreground leading-tight line-clamp-1">
-            { name }
-          </h3>
-          <span className="text-coral font-semibold text-sm whitespace-nowrap">
-            { priceLabel }
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3">
-          <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-          <span className="line-clamp-1">{ address }</span>
-        </div>
-
-        {/* Stats */ }
-        <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
-          <span>{ '🐖'.repeat(piggyPoints || 1) }</span>
-          <span>|</span>
-          <span className="text-sage">
-            👍{ hasLikesStats ? `${likesPercentage}%` : '—' }
-          </span>
-          <span>|</span>
-          <span className="text-coral">❤️{ favouritesCount }x</span>
-        </div>
-
-        {/* Reactions */ }
-        { !hideActions && (
-          <div className="flex items-center gap-1 pt-3 border-t border-border">
-            <ReactionButton
-              icon={ Heart }
-              active={ uiReaction === "heart" }
-              onClick={ () => handleReaction("heart") }
-              label="Favourite"
-              activeColor="text-coral"
-              fillColor="coral"
-            />
-            <ReactionButton
-              icon={ Plus }
-              active={ uiReaction === "bookmark" }
-              onClick={ () => handleReaction("bookmark") }
-              label="Want to Go"
-              activeColor="text-gold"
-              fillColor="gold"
-            />
-            <ReactionButton
-              icon={ ThumbsUp }
-              active={ uiReaction === "like" }
-              onClick={ () => handleReaction("like") }
-              label="Like"
-              activeColor="text-sage"
-              fillColor="sage"
-            />
-            <ReactionButton
-              icon={ ThumbsDown }
-              active={ uiReaction === "dislike" }
-              onClick={ () => handleReaction("dislike") }
-              label="Dislike"
-              activeColor="text-muted-foreground"
-              fillColor="muted-foreground"
-            />
+        </Link>
+      ) : (
+        <>
+          {/* Image */ }
+          <div className="relative h-40 bg-muted overflow-hidden">
+            { displayImageUrl ? (
+              <img
+                src={ displayImageUrl }
+                alt={ name }
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-coral opacity-30" />
+            ) }
+            {/* Category Badge */ }
+            <span className="absolute top-3 left-3 px-3 py-1 bg-charcoal-dark/80 text-cream text-xs font-medium rounded-full backdrop-blur-sm">
+              { category }
+            </span>
+            {/* Cuisine Badges at bottom of image */ }
+            { cuisineBadges.length > 0 && (
+              <div className="absolute bottom-3 left-3 right-3 flex flex-wrap gap-2">
+                { cuisineBadges.map((badge, index) => (
+                  <span
+                    key={ index }
+                    className="px-2 py-1 bg-coral/90 text-white text-xs font-medium rounded-md backdrop-blur-sm shadow-sm"
+                  >
+                    { badge }
+                  </span>
+                )) }
+              </div>
+            ) }
           </div>
-        ) }
-      </div>
+
+          {/* Content */ }
+          <div className="p-4">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <h3 className="font-display font-semibold text-lg text-foreground leading-tight line-clamp-1">
+                { name }
+              </h3>
+              <span className="text-coral font-semibold text-sm whitespace-nowrap">
+                { priceLabel }
+              </span>
+            </div>
+
+            {/* Stats and Address */ }
+            <div className="flex items-center gap-1.5 text-muted-foreground text-sm mb-3">
+              <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="line-clamp-1">{ address }</span>
+            </div>
+
+            {/* Stats */ }
+            <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
+              <span>{ '🐖'.repeat(piggyPoints || 1) }</span>
+              <span>|</span>
+              <span className="text-sage">
+                👍{ hasLikesStats ? `${likesPercentage}%` : '—' }
+              </span>
+              <span>|</span>
+              <span className="text-coral">❤️{ favouritesCount }x</span>
+            </div>
+          </div>
+        </>
+      ) }
+
+      {/* Reactions - outside of link to prevent navigation */ }
+      { !hideActions && (
+        <div
+          className="flex items-center gap-1 pt-3 border-t border-border px-4 pb-4"
+          onClick={ (e) => e.stopPropagation() }
+          onMouseDown={ (e) => e.stopPropagation() }
+        >
+          <ReactionButton
+            icon={ Heart }
+            active={ uiReaction === "heart" }
+            onClick={ () => handleReaction("heart") }
+            label="Favourite"
+            activeColor="text-coral"
+            fillColor="coral"
+          />
+          <ReactionButton
+            icon={ Plus }
+            active={ uiReaction === "bookmark" }
+            onClick={ () => handleReaction("bookmark") }
+            label="Want to Go"
+            activeColor="text-gold"
+            fillColor="gold"
+          />
+          <ReactionButton
+            icon={ ThumbsUp }
+            active={ uiReaction === "like" }
+            onClick={ () => handleReaction("like") }
+            label="Like"
+            activeColor="text-sage"
+            fillColor="sage"
+          />
+          <ReactionButton
+            icon={ ThumbsDown }
+            active={ uiReaction === "dislike" }
+            onClick={ () => handleReaction("dislike") }
+            label="Dislike"
+            activeColor="text-muted-foreground"
+            fillColor="muted-foreground"
+          />
+        </div>
+      ) }
     </motion.div>
   );
 }

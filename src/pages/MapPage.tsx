@@ -827,6 +827,34 @@ function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
           const piggyPoints = place.piggyPoints || 1;
           const piggyIcons = '🐖'.repeat(piggyPoints);
 
+          const popupContent = document.createElement('div');
+          popupContent.style.minWidth = '200px';
+          popupContent.innerHTML = `
+            <h3 style="font-weight: 600; margin: 0 0 4px 0; font-size: 16px;">${place.name}</h3>
+            <p style="margin: 0 0 4px 0; color: #666; font-size: 14px;">${place.address}</p>
+            <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 8px; align-items: center;">
+              <span style="color: #666; font-size: 12px;">${place.category}</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e5e5;">
+              <span>${piggyIcons}</span>
+              <span>|</span>
+              <span style="color: hsl(var(--sage));">👍${likesDisplay}</span>
+              <span>|</span>
+              <span style="color: hsl(var(--coral));">❤️${favouritesCount}x</span>
+            </div>
+            ${place.slug ? `<a href="/place/${place.slug}" style="display: block; margin-top: 8px; padding: 8px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); text-align: center; border-radius: 6px; text-decoration: none; font-size: 14px; font-weight: 500;">View Details</a>` : ''}
+          `;
+
+          if (place.slug) {
+            const link = popupContent.querySelector('a');
+            if (link) {
+              link.addEventListener('click', (e) => {
+                e.preventDefault();
+                window.location.href = `/place/${place.slug}`;
+              });
+            }
+          }
+
           const marker = new mapboxgl.Marker(el)
             .setLngLat([place.longitude, place.latitude])
             .setPopup(
@@ -836,22 +864,7 @@ function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
                 closeOnClick: false,
                 className: 'custom-popup'
               })
-                .setHTML(`
-                  <div style="min-width: 200px;">
-                    <h3 style="font-weight: 600; margin: 0 0 4px 0; font-size: 16px;">${place.name}</h3>
-                    <p style="margin: 0 0 4px 0; color: #666; font-size: 14px;">${place.address}</p>
-                    <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 8px; align-items: center;">
-                      <span style="color: #666; font-size: 12px;">${place.category}</span>
-                    </div>
-                    <div style="display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e5e5;">
-                      <span>${piggyIcons}</span>
-                      <span>|</span>
-                      <span style="color: hsl(var(--sage));">👍${likesDisplay}</span>
-                      <span>|</span>
-                      <span style="color: hsl(var(--coral));">❤️${favouritesCount}x</span>
-                    </div>
-                  </div>
-                `)
+                .setDOMContent(popupContent)
             )
             .addTo(map.current);
 
