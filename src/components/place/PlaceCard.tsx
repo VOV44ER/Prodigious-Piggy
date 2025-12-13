@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { useReactions } from "@/hooks/useReactions";
 import { getPlaceImageUrl } from "@/lib/place-images";
-import { usePlaceStats } from "@/hooks/usePlaceStats";
 
 interface PlaceCardProps {
   id?: string;
@@ -24,6 +23,8 @@ interface PlaceCardProps {
   };
   onReactionToggle?: (placeName: string, type: 'heart' | 'bookmark' | 'like' | 'dislike' | null, placeId?: string) => void;
   hideActions?: boolean;
+  likesCount?: number;
+  favouritesCount?: number;
 }
 
 type ReactionType = "heart" | "bookmark" | "like" | "dislike" | null;
@@ -42,13 +43,24 @@ export function PlaceCard({
   reactions: reactionsProp,
   onReactionToggle,
   hideActions = false,
+  likesCount: likesCountProp,
+  favouritesCount: favouritesCountProp,
 }: PlaceCardProps) {
-  // Use hook as fallback if reactions are not provided via props
-  // Also use hook if onReactionToggle is provided but reactionsProp might be incomplete
-  // This ensures we always have the latest reaction state
+  // Only use hook if we don't have reactions from props AND don't have onReactionToggle
+  // If we have onReactionToggle, we should use it instead of making individual queries
+  // This prevents making individual queries for each card when we already have all reactions loaded
   const useHookFallback = !reactionsProp && !onReactionToggle;
-  const { reaction: hookReaction, toggleReaction: hookToggleReaction } = useReactions(name, id, useHookFallback);
-  const { stats: placeStats } = usePlaceStats(id);
+  // Always skip useReactions when we have onReactionToggle - we already have all reactions loaded in MapPage
+  const shouldSkipHook = !!onReactionToggle || !useHookFallback;
+  const { reaction: hookReaction, toggleReaction: hookToggleReaction } = useReactions(name, id, shouldSkipHook);
+
+  // Use stats from props (loaded directly from places table)
+  const likesCount = likesCountProp ?? 0;
+  const favouritesCount = favouritesCountProp ?? 0;
+
+  // Calculate likes percentage
+  const totalReactions = likesCount + favouritesCount;
+  const likesPercentage = totalReactions > 0 ? Math.round((likesCount / totalReactions) * 100) : 0;
 
   const handleReaction = async (type: ReactionType) => {
     if (useHookFallback) {
@@ -158,9 +170,9 @@ export function PlaceCard({
         <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
           <span>🐖</span>
           <span>|</span>
-          <span className="text-sage">👍{ placeStats.likesPercentage }%</span>
+          <span className="text-sage">👍{ likesPercentage }%</span>
           <span>|</span>
-          <span className="text-coral">❤️{ placeStats.favouritesCount }x</span>
+          <span className="text-coral">❤️{ favouritesCount }x</span>
         </div>
 
         {/* Reactions */ }

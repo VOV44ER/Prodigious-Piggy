@@ -4,6 +4,9 @@ import { useAuth } from './useAuth';
 
 export type ReactionType = 'love' | 'want_to_go' | 'like' | 'dislike' | null;
 
+// Counter updates are now handled by database trigger
+// No need to update counters manually in application code
+
 export interface PlaceReactions {
     favourites: boolean;
     wantToGo: boolean;
@@ -306,6 +309,8 @@ export async function toggleReactionForPlace(
                 return currentReactions;
             }
 
+            // Counters are updated automatically by database trigger
+
             return {
                 favourites: type === 'heart' ? false : currentReactions.favourites,
                 wantToGo: type === 'bookmark' ? false : currentReactions.wantToGo,
@@ -333,6 +338,8 @@ export async function toggleReactionForPlace(
                 console.error('Error saving reaction:', error);
                 return currentReactions;
             }
+
+            // Counters are updated automatically by database trigger
 
             return {
                 favourites: type === 'heart',

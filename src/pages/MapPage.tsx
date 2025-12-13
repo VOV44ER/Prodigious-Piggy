@@ -227,6 +227,7 @@ export default function MapPage() {
   });
   const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const [userReactionsById, setUserReactionsById] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
+  const reactionsLoadedRef = useRef(false);
   const { cuisineReactions } = useCuisineReactions();
   const [homeCity, setHomeCity] = useState<string | null>(null);
   const [currentCity, setCurrentCity] = useState<string | null>(null);
@@ -234,7 +235,7 @@ export default function MapPage() {
 
   // Use currentCity for places, fallback to homeCity
   const cityForPlaces = currentCity || homeCity;
-  const { places: allPlaces, loading: isLoadingPlaces } = usePlaces(cityForPlaces);
+  const { places: allPlaces, loading: isLoadingPlaces, refetch: refetchPlaces } = usePlaces(cityForPlaces);
 
   // Update currentCity when homeCity changes
   useEffect(() => {
@@ -275,7 +276,7 @@ export default function MapPage() {
   }, [searchParams]);
 
   const loadUserReactions = useCallback(async () => {
-    if (!user) return;
+    if (!user || !allPlaces || allPlaces.length === 0) return;
 
     try {
       const placeNames = allPlaces.map(p => p.name);
@@ -284,6 +285,7 @@ export default function MapPage() {
 
       setUserReactions(reactions.byName);
       setUserReactionsById(reactions.byId);
+      reactionsLoadedRef.current = true;
     } catch (error) {
       console.error('Error loading user reactions:', error);
     }
@@ -329,40 +331,52 @@ export default function MapPage() {
     }
   }, [user]);
 
+  // Load user profile once when user changes
   useEffect(() => {
-    loadUserProfile();
-
     if (user) {
-      loadUserReactions();
-
-      // Subscribe to changes in user_reactions with debounce
-      let timeoutId: NodeJS.Timeout;
-      const channel = supabase
-        .channel('user_reactions_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'user_reactions',
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            // Debounce to prevent multiple rapid calls
-            clearTimeout(timeoutId);
-            timeoutId = setTimeout(() => {
-              loadUserReactions();
-            }, 300);
-          }
-        )
-        .subscribe();
-
-      return () => {
-        clearTimeout(timeoutId);
-        supabase.removeChannel(channel);
-      };
+      loadUserProfile();
     }
-  }, [user, loadUserReactions]);
+  }, [user, loadUserProfile]);
+
+  // Reset reactions loaded flag when user or places change significantly
+  useEffect(() => {
+    reactionsLoadedRef.current = false;
+  }, [user?.id, allPlaces.length]);
+
+  // Load user reactions and subscribe to changes only when user and places are available
+  useEffect(() => {
+    if (!user || !allPlaces || allPlaces.length === 0) return;
+
+    // Load reactions once when places are loaded
+    loadUserReactions();
+
+    // Subscribe to changes in user_reactions with debounce
+    let timeoutId: NodeJS.Timeout;
+    const channel = supabase
+      .channel('user_reactions_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_reactions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          // Debounce to prevent multiple rapid calls
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(() => {
+            loadUserReactions();
+          }, 300);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearTimeout(timeoutId);
+      supabase.removeChannel(channel);
+    };
+  }, [user, allPlaces, loadUserReactions]);
 
 
   const handleFilterChange = useCallback((newFilters: Record<string, string[]>) => {
@@ -419,17 +433,57 @@ export default function MapPage() {
       ? userReactionsById[placeId]
       : userReactions[placeName] || { favourites: false, wantToGo: false, like: false, dislike: false };
 
-    // Optimistically update UI
+    // Optimistically update UI reactions immediately
+    const isCurrentlyActive = (type === 'heart' && currentReactions.favourites) ||
+      (type === 'bookmark' && currentReactions.wantToGo) ||
+      (type === 'like' && currentReactions.like) ||
+      (type === 'dislike' && currentReactions.dislike);
+
+    const optimisticReactions = isCurrentlyActive
+      ? {
+        favourites: type === 'heart' ? false : currentReactions.favourites,
+        wantToGo: type === 'bookmark' ? false : currentReactions.wantToGo,
+        like: type === 'like' ? false : currentReactions.like,
+        dislike: type === 'dislike' ? false : currentReactions.dislike,
+      }
+      : {
+        favourites: type === 'heart',
+        wantToGo: type === 'bookmark',
+        like: type === 'like',
+        dislike: type === 'dislike',
+      };
+
+    // Update UI immediately with optimistic state
+    if (placeId) {
+      setUserReactionsById(prev => ({
+        ...prev,
+        [placeId]: optimisticReactions,
+      }));
+
+      const placesWithSameName = allPlaces.filter(p => p.name === placeName);
+      if (placesWithSameName.length === 1) {
+        setUserReactions(prev => ({
+          ...prev,
+          [placeName]: optimisticReactions,
+        }));
+      }
+    } else {
+      setUserReactions(prev => ({
+        ...prev,
+        [placeName]: optimisticReactions,
+      }));
+    }
+
+    // Then update in database
     const newReactions = await toggleReactionForPlace(placeName, currentReactions, type, placeId);
 
-    // ВАЖНО: Обновляем только по ID, чтобы избежать проблем с дубликатами имен
+    // Update with actual database response
     if (placeId) {
       setUserReactionsById(prev => ({
         ...prev,
         [placeId]: newReactions,
       }));
 
-      // Обновляем по имени только если это уникальное имя (нет других мест с таким именем)
       const placesWithSameName = allPlaces.filter(p => p.name === placeName);
       if (placesWithSameName.length === 1) {
         setUserReactions(prev => ({
@@ -438,23 +492,25 @@ export default function MapPage() {
         }));
       }
     } else {
-      // Fallback: если нет ID, обновляем по имени (но это не должно происходить)
       setUserReactions(prev => ({
         ...prev,
         [placeName]: newReactions,
       }));
     }
 
-    // Reload reactions from database to ensure sync
+    // Reload places from database to sync counters (reactions are already updated optimistically)
+    // No need to reload reactions immediately - they're already updated in state
+    // The subscription will handle syncing reactions if needed
     if (user) {
+      // Small delay to allow database trigger to complete
       setTimeout(() => {
-        loadUserReactions();
-      }, 100);
+        refetchPlaces();
+      }, 200);
     }
 
     // Dispatch event to sync with profile
     window.dispatchEvent(new Event('place_reactions_updated'));
-  }, [userReactions, userReactionsById, allPlaces, user, loadUserReactions]);
+  }, [userReactions, userReactionsById, allPlaces, user, loadUserReactions, refetchPlaces]);
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -1023,6 +1079,8 @@ function CardsView({ places, userReactions, userReactionsById, onReactionToggle,
                   { ...place }
                   reactions={ userReactionsById[place.id] || userReactions[place.name] }
                   onReactionToggle={ onReactionToggle }
+                  likesCount={ place.likesCount }
+                  favouritesCount={ place.favouritesCount }
                 />
               </motion.div>
             )) }
