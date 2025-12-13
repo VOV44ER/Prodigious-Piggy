@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Navbar } from "@/components/layout/Navbar";
 import { ChatMessage } from "@/components/chat/ChatMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
-import { PlaceCard } from "@/components/place/PlaceCard";
+import { ChatPlaceItem } from "@/components/chat/ChatPlaceItem";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Loader2, Plus, Trash2, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { usePlaces } from "@/hooks/usePlaces";
+import { getUserReactionsForPlaces } from "@/hooks/useReactions";
 
 interface Message {
   id: string;
@@ -29,14 +30,16 @@ interface Message {
   isUser: boolean;
   timestamp: Date;
   places?: Array<{
+    id: string;
     name: string;
     address: string;
     category: string;
-    cuisine: string;
+    cuisine?: string;
     price: 1 | 2 | 3 | 4;
-    rating: number;
     sentiment: number;
-    imageUrl: string;
+    favouritesCount: number;
+    likesCount: number;
+    dislikeCount: number;
   }>;
 }
 
@@ -64,12 +67,13 @@ const createSuggestedQueries = (cityName: string) => {
   ];
 };
 
-const createSystemPrompt = (cityName: string, places: Array<{ name: string; address: string; category: string; cuisine: string | null }>) => {
+const createSystemPrompt = (cityName: string, places: Array<{ name: string; address: string; category: string; cuisine: string | null; price: number; sentiment: number; id: string }>) => {
   const city = cityName.split(',')[0];
   const placesList = places.length > 0
     ? places.slice(0, 20).map(place => {
       const cuisineStr = place.cuisine ? `, ${place.cuisine}` : '';
-      return `- ${place.name} (${place.category}${cuisineStr}) - ${place.address}`;
+      const priceSymbols = "$".repeat(place.price);
+      return `- ${place.name} (${place.category}${cuisineStr}) ${priceSymbols} - ${place.address}`;
     }).join('\n')
     : 'No places available yet.';
 
@@ -78,11 +82,24 @@ const createSystemPrompt = (cityName: string, places: Array<{ name: string; addr
 Available places in ${city} include:
 ${placesList}
 
+When recommending places, format each place recommendation EXACTLY like this:
+
+**PLACE_NAME** $$ ❤️➕👍👎
+Full address with city and postal code, Country
+🐖 | 👍SENTIMENT% | ❤️FAVOURITES_COUNTx
+
+Where:
+- PLACE_NAME is the exact name from the list above
+- $$ represents price level (use $, $$, $$$, or $$$$)
+- ❤️➕👍👎 are reaction emojis (always include all four, they will be clickable buttons)
+- Full address should include street, city, postal code, and country
+- SENTIMENT% is the sentiment score percentage
+- FAVOURITES_COUNTx is the number of favourites
+
 Your responses should be:
 - Warm, friendly, and conversational (use emojis sparingly, especially 🐷)
-- Helpful and informative about food and dining in ${city}
-- Focused on restaurant recommendations, cuisine types, locations, and dining experiences in ${city}
-- Mention specific places when relevant to the user's query
+- When recommending places, use the exact format above for each place
+- You can add brief context before or after the formatted place, but keep it concise
 - If users ask about non-food topics or other cities, politely redirect them back to food and dining in ${city}
 
 Keep responses concise but engaging.`;
@@ -92,7 +109,7 @@ export default function ChatPage() {
   const [homeCity, setHomeCity] = useState<string | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const { user } = useAuth();
-  const { places: allPlaces } = usePlaces(homeCity);
+  const { places: allPlaces, refetch: refetchPlaces } = usePlaces(homeCity);
 
   const cityName = homeCity || "your city";
   const initialMessages = useMemo(() => [createInitialMessage(cityName)], [cityName]);
@@ -104,6 +121,9 @@ export default function ChatPage() {
       address: p.address,
       category: p.category,
       cuisine: p.cuisine || null,
+      price: p.price,
+      sentiment: p.sentiment,
+      id: p.id,
     }))
   ), [cityName, allPlaces]);
 
@@ -117,8 +137,47 @@ export default function ChatPage() {
     const saved = localStorage.getItem('chat_sidebar_open');
     return saved !== null ? JSON.parse(saved) : true;
   });
+  const [userReactions, setUserReactions] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
+  const [userReactionsById, setUserReactionsById] = useState<Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>>({});
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const parsePlacesFromResponse = useCallback((content: string): Array<{ id: string; name: string; address: string; category: string; cuisine?: string; price: 1 | 2 | 3 | 4; sentiment: number; favouritesCount: number; likesCount: number; dislikeCount: number }> => {
+    const places: Array<{ id: string; name: string; address: string; category: string; cuisine?: string; price: 1 | 2 | 3 | 4; sentiment: number; favouritesCount: number; likesCount: number; dislikeCount: number }> = [];
+
+    const placePattern = /\*\*([^*]+)\*\*\s*(\$+)\s*❤️➕👍👎\s*\n([^\n]+)\s*\n🐖\s*\|\s*👍(\d+)%\s*\|\s*❤️(\d+)x/gi;
+    let match;
+
+    while ((match = placePattern.exec(content)) !== null) {
+      const placeName = match[1].trim();
+      const priceSymbols = match[2];
+
+      const price = Math.min(Math.max(priceSymbols.length, 1), 4) as 1 | 2 | 3 | 4;
+
+      const foundPlace = allPlaces.find(p => p.name === placeName);
+      if (foundPlace) {
+        const likesCount = foundPlace.likesCount || 0;
+        const dislikeCount = foundPlace.dislikeCount || 0;
+        const totalLikeDislike = likesCount + dislikeCount;
+        const likesPercentage = totalLikeDislike > 0 ? Math.round((likesCount / totalLikeDislike) * 100) : 0;
+
+        places.push({
+          id: foundPlace.id,
+          name: foundPlace.name,
+          address: foundPlace.address,
+          category: foundPlace.category,
+          cuisine: foundPlace.cuisine || undefined,
+          price,
+          sentiment: likesPercentage,
+          favouritesCount: foundPlace.favouritesCount || 0,
+          likesCount,
+          dislikeCount,
+        });
+      }
+    }
+
+    return places;
+  }, [allPlaces]);
 
   const selectedSession = useMemo(
     () => sessions.find((session) => session.id === selectedSessionId) || null,
@@ -228,13 +287,37 @@ export default function ChatPage() {
       return;
     }
 
-    const mapped: Message[] = (data || []).map((message) => ({
-      id: message.id,
-      content: message.content,
-      isUser: message.role === "user",
-      timestamp: message.created_at ? new Date(message.created_at) : new Date(),
-      places: message.metadata && typeof message.metadata === "object" ? (message.metadata as Message["places"]) : undefined,
-    }));
+    const mapped: Message[] = (data || []).map((message) => {
+      const isUser = message.role === "user";
+      const parsedPlaces = !isUser ? parsePlacesFromResponse(message.content) : undefined;
+      return {
+        id: message.id,
+        content: message.content,
+        isUser,
+        timestamp: message.created_at ? new Date(message.created_at) : new Date(),
+        places: parsedPlaces && parsedPlaces.length > 0 ? parsedPlaces : undefined,
+      };
+    });
+
+    if (user && mapped.length > 0) {
+      const allPlaceNames: string[] = [];
+      const allPlaceIds: string[] = [];
+
+      mapped.forEach(msg => {
+        if (msg.places) {
+          msg.places.forEach(place => {
+            allPlaceNames.push(place.name);
+            allPlaceIds.push(place.id);
+          });
+        }
+      });
+
+      if (allPlaceNames.length > 0) {
+        const reactions = await getUserReactionsForPlaces(user.id, allPlaceNames, allPlaceIds);
+        setUserReactions(prev => ({ ...prev, ...reactions.byName }));
+        setUserReactionsById(prev => ({ ...prev, ...reactions.byId }));
+      }
+    }
 
     setMessages(mapped);
     setIsLoadingMessages(false);
@@ -341,11 +424,24 @@ export default function ChatPage() {
         };
         setMessages((prev) => [...prev, errorMessage]);
       } else {
+        const parsedPlaces = parsePlacesFromResponse(response.content);
+
+        let reactions = { byName: {} as Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }>, byId: {} as Record<string, { favourites: boolean; wantToGo: boolean; like: boolean; dislike: boolean }> };
+
+        if (user && parsedPlaces.length > 0) {
+          const placeNames = parsedPlaces.map(p => p.name);
+          const placeIds = parsedPlaces.map(p => p.id);
+          reactions = await getUserReactionsForPlaces(user.id, placeNames, placeIds);
+          setUserReactions(prev => ({ ...prev, ...reactions.byName }));
+          setUserReactionsById(prev => ({ ...prev, ...reactions.byId }));
+        }
+
         const aiResponse: Message = {
           id: (Date.now() + 1).toString(),
           content: response.content,
           isUser: false,
           timestamp: new Date(),
+          places: parsedPlaces,
         };
         setMessages((prev) => [...prev, aiResponse]);
 
@@ -556,27 +652,95 @@ export default function ChatPage() {
                   </div>
                 ) }
                 <AnimatePresence mode="popLayout">
-                  { messages.map((message) => (
-                    <div key={ message.id }>
-                      <ChatMessage
-                        content={ message.content }
-                        isUser={ message.isUser }
-                        timestamp={ message.timestamp }
-                      />
-                      {/* Place Cards */ }
-                      { message.places && message.places.length > 0 && (
-                        <motion.div
-                          initial={ { opacity: 0, y: 10 } }
-                          animate={ { opacity: 1, y: 0 } }
-                          className="mt-4 ml-12 grid grid-cols-1 sm:grid-cols-2 gap-4"
-                        >
-                          { message.places.map((place) => (
-                            <PlaceCard key={ place.name } { ...place } />
-                          )) }
-                        </motion.div>
-                      ) }
-                    </div>
-                  )) }
+                  { messages.map((message) => {
+                    const contentWithoutPlaces = message.places && message.places.length > 0
+                      ? message.content
+                        .replace(/\*\*([^*]+)\*\*\s*(\$+)\s*❤️➕👍👎\s*\n([^\n]+)\s*\n🐖\s*\|\s*👍(\d+)%\s*\|\s*❤️(\d+)x\s*/gi, '')
+                        .replace(/\n{3,}/g, '\n\n')
+                        .replace(/^\s+|\s+$/g, '')
+                      : message.content;
+
+                    return (
+                      <div key={ message.id }>
+                        <ChatMessage
+                          content={ contentWithoutPlaces }
+                          isUser={ message.isUser }
+                          timestamp={ message.timestamp }
+                        />
+                        {/* Place Items in new format */ }
+                        { message.places && message.places.length > 0 && (
+                          <motion.div
+                            initial={ { opacity: 0, y: 10 } }
+                            animate={ { opacity: 1, y: 0 } }
+                            className={ cn(
+                              "mt-4",
+                              !message.isUser && "ml-12"
+                            ) }
+                          >
+                            { message.places.map((place) => (
+                              <ChatPlaceItem
+                                key={ place.id }
+                                placeId={ place.id }
+                                name={ place.name }
+                                address={ place.address }
+                                price={ place.price }
+                                sentiment={ place.sentiment }
+                                likesCount={ place.likesCount }
+                                dislikeCount={ place.dislikeCount }
+                                favouritesCount={ place.favouritesCount }
+                                userReactions={ userReactionsById[place.id] || userReactions[place.name] }
+                                onReactionUpdate={ async () => {
+                                  if (user) {
+                                    const reactions = await getUserReactionsForPlaces(
+                                      user.id,
+                                      [place.name],
+                                      [place.id]
+                                    );
+                                    setUserReactions(prev => ({ ...prev, ...reactions.byName }));
+                                    setUserReactionsById(prev => ({ ...prev, ...reactions.byId }));
+
+                                    setTimeout(async () => {
+                                      const { data } = await supabase
+                                        .from('places')
+                                        .select('likes_count, favourites_count, want_to_go_count, dislike_count')
+                                        .eq('id', place.id)
+                                        .single();
+
+                                      if (data) {
+                                        const likesCount = (data as any).likes_count || 0;
+                                        const dislikeCount = (data as any).dislike_count || 0;
+                                        const favouritesCount = (data as any).favourites_count || 0;
+                                        const total = likesCount + dislikeCount;
+                                        const likesPercentage = total > 0 ? Math.round((likesCount / total) * 100) : 0;
+
+                                        setMessages(prev => prev.map(msg => {
+                                          if (msg.id === message.id && msg.places) {
+                                            return {
+                                              ...msg,
+                                              places: msg.places.map(p =>
+                                                p.id === place.id ? {
+                                                  ...p,
+                                                  likesCount,
+                                                  dislikeCount,
+                                                  favouritesCount,
+                                                  sentiment: likesPercentage,
+                                                } : p
+                                              ),
+                                            };
+                                          }
+                                          return msg;
+                                        }));
+                                      }
+                                    }, 200);
+                                  }
+                                } }
+                              />
+                            )) }
+                          </motion.div>
+                        ) }
+                      </div>
+                    );
+                  }) }
                 </AnimatePresence>
                 <div ref={ messagesEndRef } />
 
