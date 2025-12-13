@@ -12,6 +12,9 @@ interface FilterOption {
 interface FilterBarProps {
   onFilterChange?: (filters: Record<string, string[]>) => void;
   filters?: Record<string, string[]>;
+  priceOptions?: FilterOption[];
+  cuisineOptions?: FilterOption[];
+  categoryOptions?: FilterOption[];
 }
 
 const listOptions: FilterOption[] = [
@@ -50,18 +53,19 @@ const categoryOptions: FilterOption[] = [
   { value: "landmark", label: "Landmark" },
 ];
 
-const styleOptions: FilterOption[] = [
-  { value: "pub", label: "Pub" },
-  { value: "fine_dining", label: "Fine Dining" },
-  { value: "casual", label: "Casual" },
-  { value: "street_food", label: "Street Food" },
-  { value: "rooftop", label: "Rooftop" },
-  { value: "hidden_gem", label: "Hidden Gem" },
-];
-
-export function FilterBar({ onFilterChange, filters: externalFilters }: FilterBarProps) {
+export function FilterBar({
+  onFilterChange,
+  filters: externalFilters,
+  priceOptions: dynamicPriceOptions,
+  cuisineOptions: dynamicCuisineOptions,
+  categoryOptions: dynamicCategoryOptions,
+}: FilterBarProps) {
   const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>(externalFilters || {});
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  const effectivePriceOptions = dynamicPriceOptions || priceOptions;
+  const effectiveCuisineOptions = dynamicCuisineOptions || cuisineOptions;
+  const effectiveCategoryOptions = dynamicCategoryOptions || categoryOptions;
 
   useEffect(() => {
     if (externalFilters !== undefined) {
@@ -125,7 +129,7 @@ export function FilterBar({ onFilterChange, filters: externalFilters }: FilterBa
 
           <FilterDropdown
             label="Price"
-            options={ priceOptions }
+            options={ effectivePriceOptions }
             selected={ activeFilters.price || [] }
             onToggle={ (value) => toggleFilter("price", value) }
             isOpen={ openDropdown === "price" }
@@ -134,7 +138,7 @@ export function FilterBar({ onFilterChange, filters: externalFilters }: FilterBa
 
           <FilterDropdown
             label="Cuisine"
-            options={ cuisineOptions }
+            options={ effectiveCuisineOptions }
             selected={ activeFilters.cuisine || [] }
             onToggle={ (value) => toggleFilter("cuisine", value) }
             isOpen={ openDropdown === "cuisine" }
@@ -143,20 +147,11 @@ export function FilterBar({ onFilterChange, filters: externalFilters }: FilterBa
 
           <FilterDropdown
             label="Category"
-            options={ categoryOptions }
+            options={ effectiveCategoryOptions }
             selected={ activeFilters.category || [] }
             onToggle={ (value) => toggleFilter("category", value) }
             isOpen={ openDropdown === "category" }
             onOpenChange={ (open) => setOpenDropdown(open ? "category" : null) }
-          />
-
-          <FilterDropdown
-            label="Style"
-            options={ styleOptions }
-            selected={ activeFilters.style || [] }
-            onToggle={ (value) => toggleFilter("style", value) }
-            isOpen={ openDropdown === "style" }
-            onOpenChange={ (open) => setOpenDropdown(open ? "style" : null) }
           />
 
           { activeCount > 0 && (
@@ -246,8 +241,9 @@ function FilterDropdown({
                 zIndex: 50,
                 width: 'max-content',
                 maxWidth: '200px',
+                maxHeight: '300px',
               } }
-              className="bg-popover border border-border rounded-xl shadow-elevated p-2"
+              className="bg-popover border border-border rounded-xl shadow-elevated p-2 overflow-y-auto"
             >
               { options.map((option) => (
                 <button

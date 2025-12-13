@@ -76,6 +76,10 @@ function normalizeCityName(cityName: string): string {
     .replace(/moscow/g, 'moskva');
 }
 
+function normalizeCategory(category: string): string {
+  return category.toLowerCase().replace(/\s+/g, '_');
+}
+
 function matchesHomeCity(place: Place, homeCity: string | null): boolean {
   if (!homeCity) return true;
 
@@ -158,9 +162,9 @@ function filterPlaces(
 
     // Category filter
     if (filters.category && filters.category.length > 0) {
-      const categoryLower = place.category.toLowerCase();
+      const normalizedPlaceCategory = normalizeCategory(place.category);
       const matches = filters.category.some(
-        (filterCategory) => categoryLower === filterCategory.toLowerCase()
+        (filterCategory) => normalizedPlaceCategory === normalizeCategory(filterCategory)
       );
       if (!matches) {
         return false;
@@ -406,6 +410,61 @@ export default function MapPage() {
     setSearchParams(newSearchParams, { replace: true });
   }, [searchParams]);
 
+  const filterOptions = useMemo(() => {
+    if (!allPlaces || allPlaces.length === 0) {
+      return {
+        priceOptions: [],
+        cuisineOptions: [],
+        categoryOptions: [],
+      };
+    }
+
+    const priceSet = new Set<number>();
+    const cuisineSet = new Set<string>();
+    const categorySet = new Set<string>();
+
+    allPlaces.forEach(place => {
+      if (place.price) {
+        priceSet.add(place.price);
+      }
+      if (place.cuisine) {
+        cuisineSet.add(place.cuisine.toLowerCase());
+      }
+      if (place.category) {
+        categorySet.add(normalizeCategory(place.category));
+      }
+    });
+
+    const priceOptions = Array.from(priceSet)
+      .sort()
+      .map(price => ({
+        value: price.toString(),
+        label: '$'.repeat(price),
+      }));
+
+    const cuisineOptions = Array.from(cuisineSet)
+      .sort()
+      .map(cuisine => ({
+        value: cuisine,
+        label: cuisine.charAt(0).toUpperCase() + cuisine.slice(1),
+      }));
+
+    const categoryOptions = Array.from(categorySet)
+      .sort()
+      .map(category => ({
+        value: category,
+        label: category.split('_').map(word =>
+          word.charAt(0).toUpperCase() + word.slice(1)
+        ).join(' '),
+      }));
+
+    return {
+      priceOptions,
+      cuisineOptions,
+      categoryOptions,
+    };
+  }, [allPlaces]);
+
   const filteredPlaces = useMemo(() => {
     if (!allPlaces || allPlaces.length === 0) {
       return [];
@@ -518,7 +577,13 @@ export default function MapPage() {
 
       <main className="flex-1 pt-16 flex flex-col min-h-0 overflow-hidden">
         {/* Filter Bar */ }
-        <FilterBar onFilterChange={ handleFilterChange } filters={ filters } />
+        <FilterBar
+          onFilterChange={ handleFilterChange }
+          filters={ filters }
+          priceOptions={ filterOptions.priceOptions }
+          cuisineOptions={ filterOptions.cuisineOptions }
+          categoryOptions={ filterOptions.categoryOptions }
+        />
 
         {/* View Toggle & Actions */ }
         <div className="border-b border-border bg-card/50">
@@ -759,6 +824,8 @@ function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
           const likesPercentage = totalLikeDislike > 0 ? Math.round((likesCount / totalLikeDislike) * 100) : null;
           const hasLikesStats = totalLikeDislike > 0;
           const likesDisplay = hasLikesStats ? `${likesPercentage}%` : '—';
+          const piggyPoints = place.piggyPoints || 1;
+          const piggyIcons = '🐖'.repeat(piggyPoints);
 
           const marker = new mapboxgl.Marker(el)
             .setLngLat([place.longitude, place.latitude])
@@ -777,7 +844,7 @@ function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
                       <span style="color: #666; font-size: 12px;">${place.category}</span>
                     </div>
                     <div style="display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e5e5;">
-                      <span>🐖</span>
+                      <span>${piggyIcons}</span>
                       <span>|</span>
                       <span style="color: hsl(var(--sage));">👍${likesDisplay}</span>
                       <span>|</span>

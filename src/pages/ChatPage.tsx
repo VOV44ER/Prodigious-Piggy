@@ -41,6 +41,7 @@ interface Message {
     favouritesCount: number;
     likesCount: number;
     dislikeCount: number;
+    piggyPoints?: 1 | 2 | 3;
   }>;
 }
 
@@ -151,8 +152,8 @@ export default function ChatPage() {
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const parsePlacesFromResponse = useCallback((content: string): Array<{ id: string; name: string; address: string; category: string; cuisine?: string; price: 1 | 2 | 3 | 4; sentiment: number; favouritesCount: number; likesCount: number; dislikeCount: number }> => {
-    const places: Array<{ id: string; name: string; address: string; category: string; cuisine?: string; price: 1 | 2 | 3 | 4; sentiment: number; favouritesCount: number; likesCount: number; dislikeCount: number }> = [];
+  const parsePlacesFromResponse = useCallback((content: string): Array<{ id: string; name: string; address: string; category: string; cuisine?: string; price: 1 | 2 | 3 | 4; sentiment: number; favouritesCount: number; likesCount: number; dislikeCount: number; piggyPoints?: 1 | 2 | 3 }> => {
+    const places: Array<{ id: string; name: string; address: string; category: string; cuisine?: string; price: 1 | 2 | 3 | 4; sentiment: number; favouritesCount: number; likesCount: number; dislikeCount: number; piggyPoints?: 1 | 2 | 3 }> = [];
 
     const placePattern = /\*\*([^*]+)\*\*\s*(\$+)\s*❤️➕👍👎\s*\n([^\n]+)\s*\n🐖\s*\|\s*👍(\d+)%\s*\|\s*❤️(\d+)x/gi;
     let match;
@@ -181,6 +182,7 @@ export default function ChatPage() {
           favouritesCount: foundPlace.favouritesCount || 0,
           likesCount,
           dislikeCount,
+          piggyPoints: foundPlace.piggyPoints,
         });
       }
     }
@@ -814,6 +816,7 @@ export default function ChatPage() {
                                 likesCount={ place.likesCount }
                                 dislikeCount={ place.dislikeCount }
                                 favouritesCount={ place.favouritesCount }
+                                piggyPoints={ place.piggyPoints }
                                 userReactions={ userReactionsById[place.id] || userReactions[place.name] }
                                 onReactionUpdate={ async () => {
                                   if (user) {

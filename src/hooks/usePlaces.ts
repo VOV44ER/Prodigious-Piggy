@@ -22,6 +22,7 @@ export interface Place {
     favouritesCount?: number;
     wantToGoCount?: number;
     dislikeCount?: number;
+    piggyPoints?: 1 | 2 | 3;
 }
 
 function normalizeCityName(cityName: string): string {
@@ -54,7 +55,7 @@ function convertPlaceRowToPlace(row: PlaceRow): Place {
     // Преобразуем price_level в тип 1-4
     const price = (row.price_level as 1 | 2 | 3 | 4) || 2;
 
-    // Преобразуем rating
+    // Преобразуем rating (используется для рейтинга места)
     const rating = row.rating || 4.0;
 
     // Преобразуем sentiment_score в процент
@@ -62,6 +63,12 @@ function convertPlaceRowToPlace(row: PlaceRow): Place {
 
     // Use imageUrl from database if available, otherwise will be generated in PlaceCard
     const imageUrl = row.photos && row.photos.length > 0 ? row.photos[0] : undefined;
+
+    // Piggy points from database rating field (1-3), default to 1 if not set or out of range
+    const ratingValue = row.rating;
+    const normalizedPiggyPoints = ratingValue && ratingValue >= 1 && ratingValue <= 3
+        ? (ratingValue as 1 | 2 | 3)
+        : undefined;
 
     return {
         id: row.id,
@@ -81,6 +88,7 @@ function convertPlaceRowToPlace(row: PlaceRow): Place {
         favouritesCount: (row as any).favourites_count || 0,
         wantToGoCount: (row as any).want_to_go_count || 0,
         dislikeCount: (row as any).dislike_count || 0,
+        piggyPoints: normalizedPiggyPoints,
     };
 }
 

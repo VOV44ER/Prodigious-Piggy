@@ -27,6 +27,7 @@ interface PlaceCardProps {
   favouritesCount?: number;
   wantToGoCount?: number;
   dislikeCount?: number;
+  piggyPoints?: 1 | 2 | 3;
 }
 
 type ReactionType = "heart" | "bookmark" | "like" | "dislike" | null;
@@ -49,6 +50,7 @@ export function PlaceCard({
   favouritesCount: favouritesCountProp,
   wantToGoCount: wantToGoCountProp,
   dislikeCount: dislikeCountProp,
+  piggyPoints,
 }: PlaceCardProps) {
   // Only use hook if we don't have reactions from props AND don't have onReactionToggle
   // If we have onReactionToggle, we should use it instead of making individual queries
@@ -175,7 +177,7 @@ export function PlaceCard({
 
         {/* Stats */ }
         <div className="flex items-center gap-2 text-sm mb-4 text-muted-foreground">
-          <span>🐖</span>
+          <span>{ '🐖'.repeat(piggyPoints || 1) }</span>
           <span>|</span>
           <span className="text-sage">
             👍{ hasLikesStats ? `${likesPercentage}%` : '—' }

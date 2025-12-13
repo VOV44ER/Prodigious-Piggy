@@ -12,6 +12,7 @@ interface ChatPlaceItemProps {
     likesCount: number;
     dislikeCount: number;
     favouritesCount: number;
+    piggyPoints?: 1 | 2 | 3;
     userReactions?: {
         favourites: boolean;
         wantToGo: boolean;
@@ -34,6 +35,7 @@ export function ChatPlaceItem({
     likesCount,
     dislikeCount,
     favouritesCount,
+    piggyPoints,
     userReactions,
     onReactionUpdate,
 }: ChatPlaceItemProps) {
@@ -124,7 +126,7 @@ export function ChatPlaceItem({
             </div>
             <div className="text-sm text-muted-foreground mb-1">{ address }</div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>🐖</span>
+                <span>{ '🐖'.repeat(piggyPoints || 1) }</span>
                 <span>|</span>
                 <span>👍{ likesPercentage }%</span>
                 <span>|</span>
