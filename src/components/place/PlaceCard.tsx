@@ -25,6 +25,8 @@ interface PlaceCardProps {
   hideActions?: boolean;
   likesCount?: number;
   favouritesCount?: number;
+  wantToGoCount?: number;
+  dislikeCount?: number;
 }
 
 type ReactionType = "heart" | "bookmark" | "like" | "dislike" | null;
@@ -45,6 +47,8 @@ export function PlaceCard({
   hideActions = false,
   likesCount: likesCountProp,
   favouritesCount: favouritesCountProp,
+  wantToGoCount: wantToGoCountProp,
+  dislikeCount: dislikeCountProp,
 }: PlaceCardProps) {
   // Only use hook if we don't have reactions from props AND don't have onReactionToggle
   // If we have onReactionToggle, we should use it instead of making individual queries
@@ -57,10 +61,12 @@ export function PlaceCard({
   // Use stats from props (loaded directly from places table)
   const likesCount = likesCountProp ?? 0;
   const favouritesCount = favouritesCountProp ?? 0;
+  const wantToGoCount = wantToGoCountProp ?? 0;
+  const dislikeCount = dislikeCountProp ?? 0;
 
-  // Calculate likes percentage
-  const totalReactions = likesCount + favouritesCount;
-  const likesPercentage = totalReactions > 0 ? Math.round((likesCount / totalReactions) * 100) : 0;
+  // Calculate likes percentage: likes / (likes + dislikes)
+  const totalLikeDislike = likesCount + dislikeCount;
+  const likesPercentage = totalLikeDislike > 0 ? Math.round((likesCount / totalLikeDislike) * 100) : 0;
 
   const handleReaction = async (type: ReactionType) => {
     if (useHookFallback) {

@@ -1081,6 +1081,8 @@ function CardsView({ places, userReactions, userReactionsById, onReactionToggle,
                   onReactionToggle={ onReactionToggle }
                   likesCount={ place.likesCount }
                   favouritesCount={ place.favouritesCount }
+                  wantToGoCount={ place.wantToGoCount }
+                  dislikeCount={ place.dislikeCount }
                 />
               </motion.div>
             )) }

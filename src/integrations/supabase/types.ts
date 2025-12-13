@@ -82,12 +82,14 @@ export type Database = {
           created_at: string | null
           cuisine_type: string[] | null
           description: string | null
+          dislike_count: number | null
           favourites_count: number | null
           id: string
           is_verified: boolean | null
           latitude: number | null
           likes_count: number | null
           longitude: number | null
+          want_to_go_count: number | null
           name: string
           opening_hours: Json | null
           phone: string | null
@@ -107,6 +109,7 @@ export type Database = {
           created_at?: string | null
           cuisine_type?: string[] | null
           description?: string | null
+          dislike_count?: number | null
           favourites_count?: number | null
           id?: string
           is_verified?: boolean | null
@@ -114,6 +117,7 @@ export type Database = {
           likes_count?: number | null
           longitude?: number | null
           name: string
+          want_to_go_count?: number | null
           opening_hours?: Json | null
           phone?: string | null
           photos?: string[] | null
@@ -132,6 +136,7 @@ export type Database = {
           created_at?: string | null
           cuisine_type?: string[] | null
           description?: string | null
+          dislike_count?: number | null
           favourites_count?: number | null
           id?: string
           is_verified?: boolean | null
@@ -139,6 +144,7 @@ export type Database = {
           likes_count?: number | null
           longitude?: number | null
           name?: string
+          want_to_go_count?: number | null
           opening_hours?: Json | null
           phone?: string | null
           photos?: string[] | null

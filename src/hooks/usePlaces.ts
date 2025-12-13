@@ -20,6 +20,8 @@ export interface Place {
     longitude: number;
     likesCount?: number;
     favouritesCount?: number;
+    wantToGoCount?: number;
+    dislikeCount?: number;
 }
 
 function normalizeCityName(cityName: string): string {
@@ -77,6 +79,8 @@ function convertPlaceRowToPlace(row: PlaceRow): Place {
         longitude: row.longitude || 0,
         likesCount: (row as any).likes_count || 0,
         favouritesCount: (row as any).favourites_count || 0,
+        wantToGoCount: (row as any).want_to_go_count || 0,
+        dislikeCount: (row as any).dislike_count || 0,
     };
 }
 
@@ -98,7 +102,7 @@ export function usePlaces(homeCity: string | null) {
         try {
             let query = supabase
                 .from('places')
-                .select('*, likes_count, favourites_count')
+                .select('*, likes_count, favourites_count, want_to_go_count, dislike_count')
                 .not('latitude', 'is', null)
                 .not('longitude', 'is', null);
 
