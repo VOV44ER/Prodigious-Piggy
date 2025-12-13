@@ -751,19 +751,37 @@ function MapView({ places, homeCity, isLoadingProfile }: MapViewProps) {
           img.style.objectFit = 'contain';
           el.appendChild(img);
 
+          // Calculate likes percentage: likes / (likes + dislikes)
+          const likesCount = place.likesCount ?? 0;
+          const dislikeCount = place.dislikeCount ?? 0;
+          const favouritesCount = place.favouritesCount ?? 0;
+          const totalLikeDislike = likesCount + dislikeCount;
+          const likesPercentage = totalLikeDislike > 0 ? Math.round((likesCount / totalLikeDislike) * 100) : null;
+          const hasLikesStats = totalLikeDislike > 0;
+          const likesDisplay = hasLikesStats ? `${likesPercentage}%` : '—';
+
           const marker = new mapboxgl.Marker(el)
             .setLngLat([place.longitude, place.latitude])
             .setPopup(
-              new mapboxgl.Popup({ offset: 25 })
+              new mapboxgl.Popup({
+                offset: 25,
+                closeButton: true,
+                closeOnClick: false,
+                className: 'custom-popup'
+              })
                 .setHTML(`
                   <div style="min-width: 200px;">
                     <h3 style="font-weight: 600; margin: 0 0 4px 0; font-size: 16px;">${place.name}</h3>
                     <p style="margin: 0 0 4px 0; color: #666; font-size: 14px;">${place.address}</p>
-                    <div style="display: flex; gap: 8px; margin-top: 8px; align-items: center;">
-                      <span style="background: hsl(var(--primary)); color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500;">
-                        ⭐ ${place.rating}
-                      </span>
+                    <div style="display: flex; gap: 8px; margin-top: 8px; margin-bottom: 8px; align-items: center;">
                       <span style="color: #666; font-size: 12px;">${place.category}</span>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e5e5;">
+                      <span>🐖</span>
+                      <span>|</span>
+                      <span style="color: hsl(var(--sage));">👍${likesDisplay}</span>
+                      <span>|</span>
+                      <span style="color: hsl(var(--coral));">❤️${favouritesCount}x</span>
                     </div>
                   </div>
                 `)
